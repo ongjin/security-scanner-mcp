@@ -2,6 +2,8 @@
 
 AI가 생성한 코드의 보안 취약점을 자동으로 검출하는 MCP 서버입니다.
 
+[![npm version](https://img.shields.io/npm/v/security-scanner-mcp)](https://www.npmjs.com/package/security-scanner-mcp)
+[![npm downloads](https://img.shields.io/npm/dm/security-scanner-mcp)](https://www.npmjs.com/package/security-scanner-mcp)
 ![OWASP](https://img.shields.io/badge/OWASP-Top%2010-red)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-green)
