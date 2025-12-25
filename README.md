@@ -51,6 +51,20 @@ claude mcp add security-scanner -- security-scanner-mcp
 claude mcp add security-scanner -- node /path/to/security-scanner-mcp/dist/index.js
 ```
 
+## 빠른 설정 (권장)
+
+매번 도구 사용 허가를 묻는 것이 번거롭다면, 자동 허용 설정을 추가하세요:
+
+```bash
+# scan-security 하나만 허용 (종합 검사)
+claude config add allowedTools "mcp__security-scanner__scan-security"
+
+# 또는 모든 도구 허용
+claude config add allowedTools "mcp__security-scanner__*"
+```
+
+> 💡 **Tip**: 대부분의 경우 `scan-security` 하나면 충분합니다. 이 도구가 모든 보안 검사를 한번에 수행합니다.
+
 ## 사용 예시
 
 Claude Code에서:
