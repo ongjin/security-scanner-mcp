@@ -1,0 +1,29 @@
+# Source files (빌드 결과물만 배포)
+src/
+examples/
+*.ts
+!dist/**/*.d.ts
+
+# Development
+.git/
+.github/
+node_modules/
+*.log
+.DS_Store
+Thumbs.db
+
+# Config files
+tsconfig.json
+.eslintrc*
+.prettierrc*
+.editorconfig
+
+# Test files
+*.test.ts
+*.spec.ts
+__tests__/
+coverage/
+
+# Misc
+*.tape
+*.cast
