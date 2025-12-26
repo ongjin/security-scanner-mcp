@@ -8,6 +8,11 @@ AI가 생성한 코드의 보안 취약점을 자동으로 검출하는 MCP 서�
 ![License](https://img.shields.io/badge/license-MIT-blue)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-green)
 
+## Demo
+
+<!-- Add your demo GIF here -->
+![K8s Doctor Demo](./docs/demo.gif)
+
 ## 왜 필요한가요?
 
 AI가 생성한 코드에는 보안 취약점이 **322% 더 많다**는 연구 결과가 있습니다. 이 MCP는 코드를 커밋하기 전에 자동으로 보안 검사를 수행합니다.
