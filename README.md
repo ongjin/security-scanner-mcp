@@ -45,10 +45,10 @@ npm install && npm run build
 
 ```bash
 # npm 전역 설치 후
-claude mcp add security-scanner -- security-scanner-mcp
+claude mcp add --scope project security-scanner -- security-scanner-mcp
 
 # 또는 소스에서 빌드한 경우
-claude mcp add security-scanner -- node /path/to/security-scanner-mcp/dist/index.js
+claude mcp add --scope project security-scanner -- node /path/to/security-scanner-mcp/dist/index.js
 ```
 
 ## 빠른 설정 (도구 자동 허용)
