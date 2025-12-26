@@ -36,7 +36,7 @@ npm install -g security-scanner-mcp
 ### 또는 소스에서 빌드
 
 ```bash
-git clone https://github.com/zerry/security-scanner-mcp.git
+git clone https://github.com/ongjin/security-scanner-mcp.git
 cd security-scanner-mcp
 npm install && npm run build
 ```
@@ -51,19 +51,25 @@ claude mcp add security-scanner -- security-scanner-mcp
 claude mcp add security-scanner -- node /path/to/security-scanner-mcp/dist/index.js
 ```
 
-## 빠른 설정 (권장)
+## 빠른 설정 (도구 자동 허용)
 
-매번 도구 사용 허가를 묻는 것이 번거롭다면, 자동 허용 설정을 추가하세요:
+매번 도구 사용 승인을 누르는 것이 번거롭다면, 아래 방법으로 자동 허용을 설정하세요.
 
-```bash
-# scan-security 하나만 허용 (종합 검사)
-claude config add allowedTools "mcp__security-scanner__scan-security"
+### 🖥️ Claude Desktop App 사용자
+1. Claude 앱을 재시작합니다.
+2. `security-scanner` 도구를 사용하는 첫 번째 질문을 던집니다.
+3. 알림창이 뜨면 **"Always allow requests from this server"** 체크박스를 클릭하고 **Allow**를 누르세요.
+   (이후에는 묻지 않고 실행됩니다.)
 
-# 또는 모든 도구 허용
-claude config add allowedTools "mcp__security-scanner__*"
-```
+### ⌨️ Claude Code (CLI) 사용자
+터미널 환경(`claude` 명령어)을 사용 중이라면 권한 관리 명령어를 사용하세요.
 
-> 💡 **Tip**: 대부분의 경우 `scan-security` 하나면 충분합니다. 이 도구가 모든 보안 검사를 한번에 수행합니다.
+1. 터미널에서 `claude`를 실행합니다.
+2. 프롬프트 입력창에 `/permissions`를 입력하고 엔터를 칩니다.
+3. **Global Permissions** (또는 Project Permissions) > **Allowed Tools**를 선택합니다.
+4. `mcp__security-scanner__scan-security`만 입력하거나, 모든 도구를 허용하려면 `mcp__security-scanner__*`를 입력합니다.
+
+> 💡 **Tip**: 대부분의 경우 **`scan-security`** 하나만 허용해도 충분합니다. 이 도구가 모든 보안 검사를 통합해서 수행하기 때문입니다.
 
 ## 사용 예시
 
