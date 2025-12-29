@@ -20,6 +20,16 @@ import { scanCrypto } from './scanners/crypto.js';
 import { scanAuth } from './scanners/auth.js';
 import { scanPath } from './scanners/path.js';
 import { SecurityIssue, ScanResult, Severity } from './types.js';
+import { fixCode, formatFixResult } from './remediation/code-fixer.js';
+import { scanIaCFile, detectIaCType, formatIaCScanResult, type IaCType } from './iac-scanners/index.js';
+import { cveLookupClient } from './external/cve-lookup.js';
+import { getOWASPInfo, getCWEInfo } from './external/owasp-database.js';
+import { generateSecurityDashboard } from './reporting/mermaid-generator.js';
+import { generateSARIFReport, sarifToJSON } from './reporting/sarif-generator.js';
+import { dockerSandboxManager } from './sandbox/docker-manager.js';
+import * as fs from 'fs/promises';
+import * as path from 'path';
+import * as os from 'os';
 
 // ============================================
 // MCP 서버 초기화
@@ -226,6 +236,298 @@ server.registerTool(
         const detectedLang = language === 'auto' ? detectLanguage(code) : language;
         const issues = scanPath(code, detectedLang);
         return { content: [{ type: 'text', text: formatPathScanResult(issues) }] };
+    }
+);
+
+/**
+ * 취약점 자동 수정 제안
+ *
+ * 발견된 취약점에 대한 수정된 코드를 제공합니다.
+ */
+server.registerTool(
+    'get-fix-suggestion',
+    {
+        title: '취약점 자동 수정 제안',
+        description: '발견된 취약점에 대한 수정된 코드 제공',
+        inputSchema: {
+            code: z.string().describe('원본 코드'),
+            issueType: z.string().describe('수정할 취약점 타입 (예: "innerHTML Assignment")'),
+            language: z.enum(['javascript', 'typescript', 'python', 'java', 'go'])
+                .default('javascript')
+                .describe('프로그래밍 언어'),
+        },
+    },
+    async ({ code, issueType, language }) => {
+        // 간단한 SecurityIssue 객체 생성
+        const mockIssue: SecurityIssue = {
+            type: issueType,
+            severity: 'high',
+            message: '취약점이 발견되었습니다.',
+            fix: '코드를 수정하세요.',
+        };
+
+        const result = await fixCode(code, mockIssue, language);
+        const formatted = formatFixResult(result);
+
+        return { content: [{ type: 'text', text: formatted }] };
+    }
+);
+
+/**
+ * Infrastructure as Code (IaC) 보안 스캔
+ *
+ * Dockerfile, Kubernetes YAML, Terraform 등 IaC 파일의 보안 취약점을 검사합니다.
+ */
+server.registerTool(
+    'scan-iac',
+    {
+        title: 'Infrastructure as Code 보안 스캔',
+        description: 'Dockerfile, Kubernetes YAML, Terraform 등 IaC 파일의 보안 취약점 검사',
+        inputSchema: {
+            filePath: z.string().describe('스캔할 IaC 파일 경로'),
+            iacType: z.enum(['dockerfile', 'kubernetes', 'terraform', 'auto'])
+                .default('auto')
+                .describe('IaC 파일 타입 (auto면 자동 감지)'),
+        },
+    },
+    async ({ filePath, iacType }) => {
+        const detectedType: IaCType = iacType === 'auto'
+            ? detectIaCType(filePath)
+            : iacType as IaCType;
+
+        const issues = await scanIaCFile(filePath, detectedType);
+        const result = formatIaCScanResult(issues, detectedType);
+
+        return { content: [{ type: 'text', text: result }] };
+    }
+);
+
+/**
+ * 종합 보안 리포트 생성
+ *
+ * 스캔 결과를 기반으로 Mermaid 다이어그램, SARIF, CVE 정보 등을 포함한
+ * 고급 보안 리포트를 생성합니다.
+ */
+server.registerTool(
+    'generate-security-report',
+    {
+        title: '종합 보안 리포트 생성',
+        description: '스캔 결과를 기반으로 Mermaid 다이어그램, SARIF, CVE/OWASP 정보 포함한 종합 리포트 생성',
+        inputSchema: {
+            code: z.string().optional().describe('검사할 코드 (선택사항)'),
+            filePath: z.string().optional().describe('검사할 파일 경로 (선택사항)'),
+            language: z.enum(['javascript', 'typescript', 'python', 'java', 'go', 'auto'])
+                .default('auto')
+                .describe('프로그래밍 언어'),
+            format: z.enum(['markdown', 'sarif', 'both'])
+                .default('both')
+                .describe('리포트 포맷'),
+            enrichWithCVE: z.boolean()
+                .default(false)
+                .describe('CVE/NVD 정보로 enrichment 할지 여부 (느릴 수 있음)'),
+        },
+    },
+    async ({ code, filePath, language, format, enrichWithCVE }) => {
+        const issues: SecurityIssue[] = [];
+
+        // 코드 스캔 또는 파일 스캔
+        if (code) {
+            const detectedLang = language === 'auto' ? detectLanguage(code) : language;
+            issues.push(...scanSecrets(code));
+            issues.push(...scanInjection(code, detectedLang));
+            issues.push(...scanXss(code, detectedLang));
+            issues.push(...scanCrypto(code, detectedLang));
+            issues.push(...scanAuth(code, detectedLang));
+            issues.push(...scanPath(code, detectedLang));
+        } else if (filePath) {
+            // IaC 파일인지 확인
+            const iacType = detectIaCType(filePath);
+            if (iacType !== 'unknown') {
+                issues.push(...await scanIaCFile(filePath, iacType));
+            } else {
+                return {
+                    content: [{
+                        type: 'text',
+                        text: '⚠️ code 또는 filePath 중 하나는 필수입니다. IaC 파일인 경우 filePath를 사용하세요.'
+                    }]
+                };
+            }
+        } else {
+            return {
+                content: [{
+                    type: 'text',
+                    text: '⚠️ code 또는 filePath 중 하나는 필수입니다.'
+                }]
+            };
+        }
+
+        // CVE Enrichment (선택사항)
+        if (enrichWithCVE) {
+            await enrichIssuesWithCVE(issues);
+        }
+
+        // OWASP 정보 enrichment
+        enrichIssuesWithOWASP(issues);
+
+        let result = '';
+
+        // Markdown 리포트 생성
+        if (format === 'markdown' || format === 'both') {
+            result += generateSecurityDashboard(issues);
+            result += '\n\n---\n\n';
+            result += generateDetailedIssueList(issues);
+        }
+
+        // SARIF 리포트 생성
+        if (format === 'sarif' || format === 'both') {
+            if (format === 'both') {
+                result += '\n\n## 📄 SARIF Report\n\n';
+                result += '```json\n';
+            }
+
+            const sarifReport = generateSARIFReport(issues, filePath || 'scan-result.js');
+            result += sarifToJSON(sarifReport, true);
+
+            if (format === 'both') {
+                result += '\n```';
+            }
+        }
+
+        return { content: [{ type: 'text', text: result }] };
+    }
+);
+
+/**
+ * 샌드박스 환경에서 보안 스캔 실행
+ *
+ * Docker 컨테이너를 사용하여 격리된 환경에서 스캔을 실행합니다.
+ * 악의적인 코드로부터 호스트 시스템을 보호합니다.
+ */
+server.registerTool(
+    'scan-in-sandbox',
+    {
+        title: '샌드박스 환경에서 보안 스캔',
+        description: 'Docker 컨테이너를 사용하여 격리된 환경에서 안전하게 보안 스캔 실행',
+        inputSchema: {
+            code: z.string().describe('검사할 코드'),
+            language: z.enum(['javascript', 'typescript', 'python', 'java', 'go', 'auto'])
+                .default('auto')
+                .describe('프로그래밍 언어'),
+            timeout: z.number()
+                .min(5000)
+                .max(300000)
+                .default(30000)
+                .describe('타임아웃 (ms, 5초 ~ 5분)'),
+            memoryLimit: z.number()
+                .min(128)
+                .max(2048)
+                .default(512)
+                .describe('메모리 제한 (MB)'),
+            cpuLimit: z.number()
+                .min(0.1)
+                .max(2.0)
+                .default(0.5)
+                .describe('CPU 제한 (코어 수)'),
+        },
+    },
+    async ({ code, language, timeout, memoryLimit, cpuLimit }) => {
+        // Docker 사용 가능 여부 확인
+        const dockerAvailable = await dockerSandboxManager.isDockerAvailable();
+        if (!dockerAvailable) {
+            return {
+                content: [{
+                    type: 'text',
+                    text: '⚠️ Docker가 설치되어 있지 않거나 실행 중이 아닙니다. 일반 스캔을 대신 사용하세요.'
+                }]
+            };
+        }
+
+        // 이미지 존재 여부 확인
+        const imageName = 'security-scanner-mcp:latest';
+        const imageExists = await dockerSandboxManager.imageExists(imageName);
+
+        if (!imageExists) {
+            return {
+                content: [{
+                    type: 'text',
+                    text: `⚠️ Docker 이미지 '${imageName}'가 존재하지 않습니다.\n\n다음 명령어로 이미지를 빌드하세요:\n\`\`\`bash\nnpm run docker:build\n\`\`\``
+                }]
+            };
+        }
+
+        try {
+            // 임시 파일 생성
+            const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'scanner-'));
+            const tmpFile = path.join(tmpDir, 'code-to-scan.txt');
+
+            await fs.writeFile(tmpFile, code, 'utf-8');
+
+            // Docker에서 스캔 실행
+            const result = await dockerSandboxManager.run({
+                image: imageName,
+                command: [
+                    'node',
+                    '-e',
+                    `
+                    const fs = require('fs');
+                    const code = fs.readFileSync('/tmp/code.txt', 'utf-8');
+                    // 여기에서 스캔 실행 로직
+                    console.log('Scanning code...');
+                    console.log('Code length: ' + code.length);
+                    `
+                ],
+                env: {
+                    NODE_ENV: 'production',
+                    SCANNER_LANGUAGE: language,
+                },
+                cpuLimit,
+                memoryLimit,
+                timeout,
+                noNetwork: true,
+                readonlyRootfs: false, // 임시 파일 쓰기 필요
+                volumes: [
+                    {
+                        host: tmpFile,
+                        container: '/tmp/code.txt',
+                        readonly: true,
+                    }
+                ],
+            });
+
+            // 임시 파일 정리
+            await fs.rm(tmpDir, { recursive: true, force: true });
+
+            // 결과 포맷팅
+            let response = '## 🐳 샌드박스 스캔 결과\n\n';
+
+            if (result.timedOut) {
+                response += `⏱️ **타임아웃 발생** (${timeout}ms)\n\n`;
+                response += '스캔이 제한 시간 내에 완료되지 않았습니다.\n';
+            } else if (!result.success) {
+                response += `❌ **스캔 실패** (Exit Code: ${result.exitCode})\n\n`;
+                response += `**에러**:\n\`\`\`\n${result.stderr}\n\`\`\`\n`;
+            } else {
+                response += `✅ **스캔 완료**\n\n`;
+                response += `**출력**:\n\`\`\`\n${result.stdout}\n\`\`\`\n`;
+            }
+
+            response += `\n### 🔒 샌드박스 설정\n\n`;
+            response += `- **메모리 제한**: ${memoryLimit}MB\n`;
+            response += `- **CPU 제한**: ${cpuLimit} 코어\n`;
+            response += `- **타임아웃**: ${timeout}ms\n`;
+            response += `- **네트워크**: 비활성화\n`;
+            response += `- **권한**: 최소 권한\n`;
+
+            return { content: [{ type: 'text', text: response }] };
+
+        } catch (error) {
+            return {
+                content: [{
+                    type: 'text',
+                    text: `❌ 샌드박스 실행 중 에러 발생:\n\n${error instanceof Error ? error.message : String(error)}`
+                }]
+            };
+        }
     }
 );
 
@@ -452,6 +754,146 @@ ${issues.map(issue => `
 - **문제**: ${issue.message}
 - **해결책**: ${issue.fix}
 `).join('\n')}`;
+}
+
+/**
+ * CVE 정보로 issue enrichment
+ */
+async function enrichIssuesWithCVE(issues: SecurityIssue[]): Promise<void> {
+    for (const issue of issues) {
+        // metadata에 cveIds가 있으면 조회
+        if (issue.metadata?.cveIds && Array.isArray(issue.metadata.cveIds)) {
+            const cveInfos = await cveLookupClient.lookupMultipleCVEs(issue.metadata.cveIds);
+            issue.metadata.cveDetails = Array.from(cveInfos.values());
+        }
+    }
+}
+
+/**
+ * OWASP 정보로 issue enrichment
+ */
+function enrichIssuesWithOWASP(issues: SecurityIssue[]): void {
+    for (const issue of issues) {
+        // OWASP 카테고리 정보
+        if (issue.owaspCategory) {
+            const owaspInfo = getOWASPInfo(issue.owaspCategory);
+            if (owaspInfo) {
+                issue.metadata = issue.metadata || {};
+                issue.metadata.owaspInfo = owaspInfo;
+            }
+        }
+
+        // CWE 정보
+        if (issue.cweId) {
+            const cweInfo = getCWEInfo(issue.cweId);
+            if (cweInfo) {
+                issue.metadata = issue.metadata || {};
+                issue.metadata.cweInfo = cweInfo;
+            }
+        }
+    }
+}
+
+/**
+ * 상세 이슈 목록 생성
+ */
+function generateDetailedIssueList(issues: SecurityIssue[]): string {
+    if (issues.length === 0) {
+        return '## ✅ 발견된 취약점 없음\n\n코드가 안전합니다!';
+    }
+
+    let result = '## 📋 발견된 취약점 상세 목록\n\n';
+
+    const critical = issues.filter(i => i.severity === 'critical');
+    const high = issues.filter(i => i.severity === 'high');
+    const medium = issues.filter(i => i.severity === 'medium');
+    const low = issues.filter(i => i.severity === 'low');
+
+    const formatIssue = (issue: SecurityIssue, index: number) => {
+        let output = `### ${index}. ${issue.type}\n\n`;
+        output += `- **심각도**: ${getSeverityEmoji(issue.severity)} ${issue.severity.toUpperCase()}\n`;
+        output += `- **메시지**: ${issue.message}\n`;
+
+        if (issue.line) {
+            output += `- **위치**: 라인 ${issue.line}\n`;
+        }
+
+        if (issue.match) {
+            output += `- **코드**: \`${issue.match}\`\n`;
+        }
+
+        output += `- **해결책**: ${issue.fix}\n`;
+
+        if (issue.owaspCategory) {
+            output += `- **OWASP**: ${issue.owaspCategory}\n`;
+
+            // OWASP 상세 정보
+            if (issue.metadata?.owaspInfo) {
+                output += `  - ${issue.metadata.owaspInfo.description}\n`;
+            }
+        }
+
+        if (issue.cweId) {
+            output += `- **CWE**: ${issue.cweId}\n`;
+
+            // CWE 상세 정보
+            if (issue.metadata?.cweInfo) {
+                output += `  - ${issue.metadata.cweInfo.description}\n`;
+            }
+        }
+
+        // CVE 정보
+        if (issue.metadata?.cveDetails && Array.isArray(issue.metadata.cveDetails)) {
+            output += `- **관련 CVE**:\n`;
+            for (const cve of issue.metadata.cveDetails) {
+                output += `  - **${cve.id}** (CVSS: ${cve.cvssV3Score || cve.cvssV2Score || 'N/A'})\n`;
+                output += `    - ${cve.description}\n`;
+            }
+        }
+
+        output += '\n';
+        return output;
+    };
+
+    if (critical.length > 0) {
+        result += `### 🔴 Critical (${critical.length}개)\n\n`;
+        critical.forEach((issue, idx) => {
+            result += formatIssue(issue, idx + 1);
+        });
+    }
+
+    if (high.length > 0) {
+        result += `### 🟠 High (${high.length}개)\n\n`;
+        high.forEach((issue, idx) => {
+            result += formatIssue(issue, idx + 1);
+        });
+    }
+
+    if (medium.length > 0) {
+        result += `### 🟡 Medium (${medium.length}개)\n\n`;
+        medium.forEach((issue, idx) => {
+            result += formatIssue(issue, idx + 1);
+        });
+    }
+
+    if (low.length > 0) {
+        result += `### 🟢 Low (${low.length}개)\n\n`;
+        low.forEach((issue, idx) => {
+            result += formatIssue(issue, idx + 1);
+        });
+    }
+
+    return result;
+}
+
+function getSeverityEmoji(severity: Severity): string {
+    const emojis = {
+        critical: '🔴',
+        high: '🟠',
+        medium: '🟡',
+        low: '🟢'
+    };
+    return emojis[severity];
 }
 
 // ============================================

@@ -40,6 +40,9 @@ export interface SecurityIssue {
 
     /** CWE ID (있으면) */
     cweId?: string;
+
+    /** 추가 메타데이터 (IaC 규칙 ID, CVE 정보 등) */
+    metadata?: Record<string, any>;
 }
 
 /**

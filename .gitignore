@@ -40,3 +40,5 @@ coverage/
 # Debug
 *.cast
 *.tape
+
+.mcp*
