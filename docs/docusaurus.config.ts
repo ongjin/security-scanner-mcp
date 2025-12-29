@@ -23,7 +23,7 @@ const config: Config = {
 
   i18n: {
     defaultLocale: 'en',
-    locales: ['en'], // TODO: Add 'ko', 'ja', 'zh-CN' after translations are complete
+    locales: ['en', 'ko', 'ja', 'zh-CN'],
     localeConfigs: {
       en: {
         label: 'English',
