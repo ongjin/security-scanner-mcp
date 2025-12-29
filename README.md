@@ -322,39 +322,25 @@ Claude: [scan-in-sandbox 호출]
 
 ### Docker 이미지 빌드
 
-#### 소스에서 빌드한 경우
+#### Docker Hub에서 pull (권장)
 
 ```bash
-npm run docker:build
-```
-
-#### npm으로 전역 설치한 경우
-
-```bash
-# 1. npm 전역 패키지 디렉토리 찾기
-npm root -g
-
-# 2. 해당 디렉토리의 security-scanner-mcp로 이동
-cd $(npm root -g)/security-scanner-mcp
-
-# 3. npm 패키지용 Dockerfile로 빌드
-npm run docker:build-npm
-```
-
-또는 **더 간단하게**:
-
-```bash
-# 어디서든 실행 가능
-npx security-scanner-mcp docker:build-npm
-```
-
-#### Docker Hub에서 pull (추천)
-
-```bash
-# 미리 빌드된 이미지 다운로드
+# 미리 빌드된 이미지 다운로드 (Trivy, Checkov, GitLeaks 포함)
 docker pull zerryth/security-scanner-mcp:latest
 docker tag zerryth/security-scanner-mcp:latest security-scanner-mcp:latest
 ```
+
+#### 소스에서 직접 빌드
+
+```bash
+# 소스 코드가 있는 경우
+npm run docker:build
+```
+
+**포함된 외부 도구**:
+- Trivy v0.50.4 - 컨테이너/IaC 취약점 스캐너
+- GitLeaks v8.18.4 - 시크릿 탐지
+- Checkov - Infrastructure as Code 보안 스캐너
 
 ### 샌드박스에서 스캔 실행
 

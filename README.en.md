@@ -322,39 +322,25 @@ Protect your host system from potentially malicious code by running scans in an 
 
 ### Build Docker Image
 
-#### If built from source
-
-```bash
-npm run docker:build
-```
-
-#### If installed via npm globally
-
-```bash
-# 1. Find npm global package directory
-npm root -g
-
-# 2. Navigate to security-scanner-mcp
-cd $(npm root -g)/security-scanner-mcp
-
-# 3. Build using npm package Dockerfile
-npm run docker:build-npm
-```
-
-Or **more simply**:
-
-```bash
-# Run from anywhere
-npx security-scanner-mcp docker:build-npm
-```
-
 #### Pull from Docker Hub (Recommended)
 
 ```bash
-# Download pre-built image
+# Download pre-built image (includes Trivy, Checkov, GitLeaks)
 docker pull zerryth/security-scanner-mcp:latest
 docker tag zerryth/security-scanner-mcp:latest security-scanner-mcp:latest
 ```
+
+#### Build from Source
+
+```bash
+# If you have the source code
+npm run docker:build
+```
+
+**Included External Tools**:
+- Trivy v0.50.4 - Container/IaC vulnerability scanner
+- GitLeaks v8.18.4 - Secret detection
+- Checkov - Infrastructure as Code security scanner
 
 ### Run Sandbox Scan
 
