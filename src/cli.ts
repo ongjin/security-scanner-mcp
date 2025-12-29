@@ -448,4 +448,16 @@ function getSeverityColor(severity: Severity, c: Record<string, string>): string
 // ============================================
 // CLI 실행
 // ============================================
-program.parse();
+
+// 인자 없이 실행하면 MCP 서버 모드로 시작 (Claude Code 호환)
+const args = process.argv.slice(2);
+if (args.length === 0 || (args.length === 1 && (args[0] === '--help' || args[0] === '-h'))) {
+    if (args.length === 0) {
+        // 인자 없으면 MCP 서버 모드
+        import('./index.js');
+    } else {
+        program.parse();
+    }
+} else {
+    program.parse();
+}
