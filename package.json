@@ -1,6 +1,6 @@
 {
     "name": "security-scanner-mcp",
-    "version": "1.0.3",
+    "version": "1.0.4",
     "description": "MCP server that scans AI-generated code for security vulnerabilities (OWASP Top 10, hardcoded secrets, SQL injection, XSS)",
     "type": "module",
     "main": "dist/index.js",
