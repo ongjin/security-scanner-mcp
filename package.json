@@ -24,7 +24,7 @@
         "prepublishOnly": "npm run build",
         "test": "node --test",
         "docker:build": "docker build -t security-scanner-mcp:latest .",
-        "docker:build-npm": "[ -f .dockerignore.npm ] && cp .dockerignore.npm .dockerignore || true && docker build -f Dockerfile.npm -t security-scanner-mcp:latest .",
+        "docker:build-npm": "mv .dockerignore .dockerignore.bak 2>/dev/null || true && docker build -f Dockerfile.npm -t security-scanner-mcp:latest . && mv .dockerignore.bak .dockerignore 2>/dev/null || true",
         "docker:run": "docker run --rm security-scanner-mcp:latest"
     },
     "keywords": [

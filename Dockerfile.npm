@@ -11,7 +11,7 @@ WORKDIR /app
 
 # 현재 디렉토리의 파일 복사 (npm install 후의 node_modules/security-scanner-mcp)
 COPY package*.json ./
-COPY dist ./dist
+COPY --chown=scanner:scanner dist ./dist
 
 # 프로덕션 의존성 설치
 RUN npm ci --production && \
