@@ -117,7 +117,7 @@ export function generateSARIFReport(
                     driver: {
                         name: 'Security Scanner MCP',
                         version: toolVersion,
-                        informationUri: 'https://github.com/zerryth/security-scanner-mcp',
+                        informationUri: 'https://github.com/zerry_jin/security-scanner-mcp',
                         rules: Array.from(rulesMap.values()),
                     },
                 },

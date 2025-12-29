@@ -320,27 +320,28 @@ Claude: [calls scan-in-sandbox]
 
 Protect your host system from potentially malicious code by running scans in an isolated Docker environment.
 
-### Build Docker Image
+### Prepare Docker Image
 
 #### Pull from Docker Hub (Recommended)
 
 ```bash
-# Download pre-built image (includes Trivy, Checkov, GitLeaks)
-docker pull zerryth/security-scanner-mcp:latest
-docker tag zerryth/security-scanner-mcp:latest security-scanner-mcp:latest
+# Download pre-built image (includes Trivy, GitLeaks, Checkov)
+docker pull ongjin/security-scanner-mcp:latest
+docker tag ongjin/security-scanner-mcp:latest security-scanner-mcp:latest
 ```
 
-#### Build from Source
-
-```bash
-# If you have the source code
-npm run docker:build
-```
-
-**Included External Tools**:
+**Included External Security Tools**:
 - Trivy v0.50.4 - Container/IaC vulnerability scanner
 - GitLeaks v8.18.4 - Secret detection
 - Checkov - Infrastructure as Code security scanner
+
+#### Build from Source (Optional)
+
+```bash
+npm run docker:build
+```
+
+> Note: Building takes 5-10 minutes and the image size is approximately 500MB.
 
 ### Run Sandbox Scan
 

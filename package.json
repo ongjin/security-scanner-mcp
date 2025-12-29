@@ -23,7 +23,9 @@
         "demo": "tsx examples/demo.ts",
         "prepublishOnly": "npm run build",
         "test": "node --test",
-        "docker:build": "docker build -t security-scanner-mcp:latest .",
+        "docker:build": "docker build --target source -t security-scanner-mcp:latest .",
+        "docker:tag": "docker tag security-scanner-mcp:latest ongjin/security-scanner-mcp:latest && docker tag security-scanner-mcp:latest ongjin/security-scanner-mcp:$(node -p \"require('./package.json').version\")",
+        "docker:push": "npm run docker:tag && docker push ongjin/security-scanner-mcp:latest && docker push ongjin/security-scanner-mcp:$(node -p \"require('./package.json').version\")",
         "docker:run": "docker run --rm security-scanner-mcp:latest"
     },
     "keywords": [

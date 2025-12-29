@@ -47,7 +47,7 @@ RUN apk add --no-cache \
     tar xz -C /usr/local/bin && \
     chmod +x /usr/local/bin/gitleaks && \
     # Checkov 설치 (Python)
-    pip3 install --no-cache-dir checkov && \
+    pip3 install --no-cache-dir --break-system-packages checkov && \
     # 버전 확인
     trivy --version && \
     gitleaks version && \

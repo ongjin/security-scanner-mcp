@@ -13,6 +13,9 @@ import { scanXss } from '../scanners/xss.js';
 import { scanCrypto } from '../scanners/crypto.js';
 import { scanAuth } from '../scanners/auth.js';
 import { scanPath } from '../scanners/path.js';
+import { scanWithGitLeaks } from '../external/gitleaks-wrapper.js';
+import { scanWithTrivy } from '../external/trivy-wrapper.js';
+import { scanWithCheckov } from '../external/checkov-wrapper.js';
 import { SecurityIssue } from '../types.js';
 import * as fs from 'fs';
 
@@ -61,9 +64,13 @@ async function scanCodeInSandbox() {
         // 언어 감지
         const detectedLang = language === 'auto' ? detectLanguage(code) : language;
 
+        // 파일명 추출
+        const filename = codeFilePath.split('/').pop() || 'code.txt';
+
         // 보안 스캔 실행
         const issues: SecurityIssue[] = [];
 
+        // 1. 내장 스캐너
         issues.push(...scanSecrets(code));
         issues.push(...scanInjection(code, detectedLang));
         issues.push(...scanXss(code, detectedLang));
@@ -71,10 +78,43 @@ async function scanCodeInSandbox() {
         issues.push(...scanAuth(code, detectedLang));
         issues.push(...scanPath(code, detectedLang));
 
+        // 2. 외부 도구: GitLeaks (모든 파일)
+        try {
+            const gitleaksIssues = await scanWithGitLeaks(code, filename);
+            issues.push(...gitleaksIssues);
+        } catch (error) {
+            console.error('GitLeaks scan failed:', error);
+        }
+
+        // 3. 외부 도구: IaC 스캔 (Trivy, Checkov)
+        const iacExtensions = ['.dockerfile', 'dockerfile', '.yaml', '.yml', '.tf', '.tfvars'];
+        const isIacFile = iacExtensions.some(ext =>
+            filename.toLowerCase().endsWith(ext) || filename.toLowerCase() === 'dockerfile'
+        );
+
+        if (isIacFile) {
+            // Trivy IaC 스캔
+            try {
+                const triviaIssues = await scanWithTrivy(code, filename, 'config');
+                issues.push(...triviaIssues);
+            } catch (error) {
+                console.error('Trivy scan failed:', error);
+            }
+
+            // Checkov IaC 스캔
+            try {
+                const checkovIssues = await scanWithCheckov(code, filename);
+                issues.push(...checkovIssues);
+            } catch (error) {
+                console.error('Checkov scan failed:', error);
+            }
+        }
+
         // 결과를 JSON으로 출력
         const result = {
             success: true,
             language: detectedLang,
+            filename,
             issuesCount: issues.length,
             issues: issues.map(issue => ({
                 type: issue.type,
@@ -85,6 +125,7 @@ async function scanCodeInSandbox() {
                 match: issue.match,
                 owaspCategory: issue.owaspCategory,
                 cweId: issue.cweId,
+                metadata: issue.metadata,
             })),
             summary: {
                 critical: issues.filter(i => i.severity === 'critical').length,
