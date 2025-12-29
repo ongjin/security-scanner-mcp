@@ -1,0 +1,32 @@
+# .dockerignore for npm package builds
+# npm 패키지는 이미 빌드된 dist/가 있으므로 제외하지 않음
+
+# Dependencies (will be reinstalled)
+node_modules
+
+# IDE
+.vscode
+.idea
+
+# Git
+.git
+.gitignore
+
+# Tests
+__tests__
+*.test.js
+*.test.ts
+*.spec.js
+*.spec.ts
+
+# CI/CD
+.github
+
+# Temp files
+*.log
+*.tmp
+.DS_Store
+
+# Source (npm 패키지에는 dist만 있음)
+src
+tsconfig.json
