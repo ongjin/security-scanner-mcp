@@ -13,9 +13,8 @@ WORKDIR /app
 COPY package*.json ./
 COPY --chown=scanner:scanner dist ./dist
 
-# 프로덕션 의존성 설치
-RUN npm ci --production && \
-    npm cache clean --force
+# node_modules도 복사 (npm 전역 패키지는 이미 설치되어 있음)
+COPY --chown=scanner:scanner node_modules ./node_modules
 
 # 권한 설정
 RUN chown -R scanner:scanner /app

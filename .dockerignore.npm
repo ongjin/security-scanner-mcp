@@ -1,8 +1,8 @@
 # .dockerignore for npm package builds
-# npm 패키지는 이미 빌드된 dist/가 있으므로 제외하지 않음
+# npm 패키지는 이미 빌드된 dist/와 node_modules/가 있으므로 복사함
 
-# Dependencies (will be reinstalled)
-node_modules
+# Dependencies - npm 패키지는 이미 설치되어 있으므로 제외하지 않음
+# node_modules (복사해서 사용)
 
 # IDE
 .vscode
