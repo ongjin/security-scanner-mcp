@@ -4,11 +4,12 @@ AI가 생성한 코드의 보안 취약점을 자동으로 검출하고, 수정�
 
 [![npm version](https://img.shields.io/npm/v/security-scanner-mcp)](https://www.npmjs.com/package/security-scanner-mcp)
 [![npm downloads](https://img.shields.io/npm/dm/security-scanner-mcp)](https://www.npmjs.com/package/security-scanner-mcp)
+[![Documentation](https://img.shields.io/badge/docs-GitHub%20Pages-blue)](https://ongjin.github.io/security-scanner-mcp)
 ![OWASP](https://img.shields.io/badge/OWASP-Top%2010-red)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-green)
 
-**[한국어](#korean)** | **[English](README.en.md)**
+**[한국어](#korean)** | **[English](README.en.md)** | **[📚 Documentation](https://ongjin.github.io/security-scanner-mcp)**
 
 ## Demo
 

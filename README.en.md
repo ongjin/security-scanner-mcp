@@ -4,11 +4,12 @@ Your **intelligent security partner** that automatically detects vulnerabilities
 
 [![npm version](https://img.shields.io/npm/v/security-scanner-mcp)](https://www.npmjs.com/package/security-scanner-mcp)
 [![npm downloads](https://img.shields.io/npm/dm/security-scanner-mcp)](https://www.npmjs.com/package/security-scanner-mcp)
+[![Documentation](https://img.shields.io/badge/docs-GitHub%20Pages-blue)](https://ongjin.github.io/security-scanner-mcp)
 ![OWASP](https://img.shields.io/badge/OWASP-Top%2010-red)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-green)
 
-**[English](#english)** | **[한국어](README.md)**
+**[English](#english)** | **[한국어](README.md)** | **[📚 Documentation](https://ongjin.github.io/security-scanner-mcp)**
 
 ## Demo
 
