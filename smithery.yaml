@@ -1,6 +1,7 @@
 # Smithery configuration for security-scanner-mcp
 # https://smithery.ai/docs/config
 
+# For local/stdio distribution (Claude Desktop, Claude Code)
 startCommand:
   type: stdio
   configSchema:
@@ -12,3 +13,7 @@ startCommand:
       command: 'npx',
       args: ['-y', 'security-scanner-mcp']
     })
+
+# Build configuration
+build:
+  dockerfile: false
