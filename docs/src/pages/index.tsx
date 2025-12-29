@@ -5,6 +5,7 @@ import Layout from '@theme/Layout';
 import Heading from '@theme/Heading';
 
 import styles from './index.module.css';
+import { JSX } from 'react';
 
 function HomepageHeader() {
   const {siteConfig} = useDocusaurusContext();

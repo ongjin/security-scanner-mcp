@@ -6,11 +6,19 @@ const sidebars: SidebarsConfig = {
     {
       type: 'category',
       label: 'Getting Started',
+      link: {
+        type: 'generated-index',
+        description: 'Get started with Security Scanner MCP in minutes.',
+      },
       items: ['installation', 'quick-start'],
     },
     {
       type: 'category',
       label: 'Features',
+      link: {
+        type: 'generated-index',
+        description: 'Explore all the powerful features of Security Scanner MCP.',
+      },
       items: [
         'features/code-scanning',
         'features/iac-scanning',
@@ -21,6 +29,10 @@ const sidebars: SidebarsConfig = {
     {
       type: 'category',
       label: 'Usage',
+      link: {
+        type: 'generated-index',
+        description: 'Learn how to use Security Scanner MCP in various scenarios.',
+      },
       items: [
         'usage/basic-usage',
         'usage/cli',
@@ -30,6 +42,10 @@ const sidebars: SidebarsConfig = {
     {
       type: 'category',
       label: 'Advanced',
+      link: {
+        type: 'generated-index',
+        description: 'Advanced features and integration options.',
+      },
       items: [
         'advanced/external-tools',
         'advanced/reporting',
@@ -39,6 +55,10 @@ const sidebars: SidebarsConfig = {
     {
       type: 'category',
       label: 'Reference',
+      link: {
+        type: 'generated-index',
+        description: 'Complete API and configuration reference.',
+      },
       items: [
         'reference/vulnerabilities',
         'reference/configuration',

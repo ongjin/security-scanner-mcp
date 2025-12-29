@@ -14,11 +14,16 @@ const config: Config = {
   projectName: 'security-scanner-mcp',
 
   onBrokenLinks: 'throw',
-  onBrokenMarkdownLinks: 'warn',
+
+  markdown: {
+    hooks: {
+      onBrokenMarkdownLinks: 'warn',
+    },
+  },
 
   i18n: {
     defaultLocale: 'en',
-    locales: ['en', 'ko', 'ja', 'zh-CN'],
+    locales: ['en'], // TODO: Add 'ko', 'ja', 'zh-CN' after translations are complete
     localeConfigs: {
       en: {
         label: 'English',
@@ -101,7 +106,7 @@ const config: Config = {
             },
             {
               label: 'Usage',
-              to: '/docs/usage',
+              to: '/docs/category/usage',
             },
           ],
         },

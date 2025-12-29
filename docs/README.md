@@ -1,89 +1,74 @@
 # Security Scanner MCP Documentation
 
-This directory contains the Docusaurus documentation site for Security Scanner MCP.
+This directory contains the documentation website for Security Scanner MCP, built with [Docusaurus](https://docusaurus.io/).
 
 ## Quick Start
 
+### Installation
+
 ```bash
-# Install dependencies
 npm install
+```
 
-# Start development server
+### Local Development
+
+```bash
 npm start
+```
 
-# Build for production
+This command starts a local development server and opens a browser window. Most changes are reflected live without having to restart the server.
+
+### Build
+
+```bash
 npm run build
+```
 
-# Serve built site
+This command generates static content into the `build` directory that can be served using any static hosting service.
+
+### Serve Build Locally
+
+```bash
 npm run serve
 ```
 
-## Development
+Test the production build locally.
 
-The documentation supports 4 languages:
-- English (default)
-- 한국어 (Korean)
-- 日本語 (Japanese) - Coming soon
-- 简体中文 (Chinese) - Coming soon
-
-### Start with specific locale
-
-```bash
-# Korean
-npm run start -- --locale ko
-
-# Japanese
-npm run start -- --locale ja
-
-# Chinese
-npm run start -- --locale zh-CN
-```
-
-## Deployment
-
-Documentation is automatically deployed to GitHub Pages when changes are pushed to the `main` branch.
-
-URL: https://ongjin.github.io/security-scanner-mcp/
-
-## Structure
+## Documentation Structure
 
 ```
 docs/
-├── docs/                    # English documentation
-│   ├── intro.md
-│   ├── installation.md
-│   ├── quick-start.md
-│   ├── features/
-│   ├── usage/
-│   ├── advanced/
-│   └── reference/
-├── i18n/                    # Translations
-│   ├── ko/                  # Korean
-│   ├── ja/                  # Japanese (TODO)
-│   └── zh-CN/               # Chinese (TODO)
-├── src/
-│   ├── components/
-│   ├── css/
-│   └── pages/
-└── static/
-    └── img/
+├── docs/                    # Documentation markdown files
+│   ├── intro.md            # Introduction
+│   ├── installation.md     # Installation guide
+│   ├── quick-start.md      # Quick start guide
+│   ├── features/           # Feature documentation
+│   ├── usage/              # Usage guides
+│   ├── advanced/           # Advanced topics
+│   └── reference/          # API and configuration reference
+├── src/                    # Custom React components
+│   └── pages/              # Custom pages
+├── static/                 # Static assets (images, favicons)
+└── docusaurus.config.ts   # Site configuration
 ```
 
-## Adding Translations
+## Multi-language Support
 
-1. Create translation directory:
-```bash
-mkdir -p i18n/{locale}/docusaurus-plugin-content-docs/current
-```
+The site is configured for multi-language support:
+- English (default)
+- Korean (todo)
+- Japanese (todo)
+- Chinese (todo)
 
-2. Translate markdown files to the new locale
+To add translations, create files in `i18n/{locale}/docusaurus-plugin-content-docs/current/`.
 
-3. Update `docusaurus.config.ts` if adding a new locale
+## Deployment
 
-## Contributing
+The documentation is automatically deployed to GitHub Pages via GitHub Actions when changes are pushed to the main branch.
 
-Contributions are welcome! Please:
-1. Follow the existing documentation structure
-2. Maintain consistent formatting
-3. Test locally before submitting
-4. Update translations if modifying English docs
+See `.github/workflows/deploy-docs.yml` for the deployment configuration.
+
+## Learn More
+
+- [Docusaurus Documentation](https://docusaurus.io/)
+- [Markdown Features](https://docusaurus.io/docs/markdown-features)
