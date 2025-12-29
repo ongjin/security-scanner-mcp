@@ -29,6 +29,9 @@ export interface SecurityIssue {
     /** 해결 방법 제안 */
     fix: string;
 
+    /** 발견된 파일 경로 (CLI 모드에서 사용) */
+    file?: string;
+
     /** 발견된 라인 번호 (1-indexed) */
     line?: number;
 

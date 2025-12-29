@@ -6,7 +6,7 @@
     "main": "dist/index.js",
     "types": "dist/index.d.ts",
     "bin": {
-        "security-scanner-mcp": "dist/index.js"
+        "security-scanner-mcp": "dist/cli.js"
     },
     "files": [
         "dist",
@@ -58,20 +58,21 @@
         "node": ">=18.0.0"
     },
     "dependencies": {
-        "@modelcontextprotocol/sdk": "^1.0.0",
-        "zod": "^3.23.0",
         "@babel/parser": "^7.23.0",
-        "jscodeshift": "^0.15.0",
-        "recast": "^0.23.0",
-        "prettier": "^3.1.0",
-        "js-yaml": "^4.1.0",
+        "@modelcontextprotocol/sdk": "^1.0.0",
         "axios": "^1.6.0",
-        "node-cache": "^5.1.2"
+        "commander": "^12.1.0",
+        "js-yaml": "^4.1.0",
+        "jscodeshift": "^0.15.0",
+        "node-cache": "^5.1.2",
+        "prettier": "^3.1.0",
+        "recast": "^0.23.0",
+        "zod": "^3.23.0"
     },
     "devDependencies": {
-        "@types/node": "^20.0.0",
-        "@types/jscodeshift": "^0.11.0",
         "@types/js-yaml": "^4.0.9",
+        "@types/jscodeshift": "^0.11.0",
+        "@types/node": "^20.0.0",
         "tsx": "^4.0.0",
         "typescript": "^5.0.0"
     }

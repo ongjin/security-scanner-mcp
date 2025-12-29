@@ -394,6 +394,102 @@ src/
     └── docker-manager.ts      # Docker execution management
 ```
 
+## 🖥️ CLI Mode (CI/CD Integration)
+
+Run the scanner independently without Claude. Works with Jenkins, GitHub Actions, GitLab CI, and any CI/CD platform.
+
+### Basic Usage
+
+```bash
+# Scan a file
+npx security-scanner-mcp scan ./src/app.js
+
+# Scan a directory
+npx security-scanner-mcp scan ./src
+
+# Save results to file
+npx security-scanner-mcp scan ./src --output report.txt
+```
+
+### Output Formats
+
+```bash
+# JSON format (for parsing)
+npx security-scanner-mcp scan ./src --format json
+
+# SARIF format (GitHub Code Scanning compatible)
+npx security-scanner-mcp scan ./src --format sarif --output report.sarif
+```
+
+### CI/CD Options
+
+```bash
+# Fail build on critical vulnerabilities (exit code 1)
+npx security-scanner-mcp scan ./src --fail-on critical
+
+# Fail build on high or above
+npx security-scanner-mcp scan ./src --fail-on high
+
+# Include specific files only
+npx security-scanner-mcp scan ./src --include "*.ts,*.js"
+
+# Exclude specific folders
+npx security-scanner-mcp scan ./src --exclude "node_modules,dist,test"
+```
+
+### Jenkins Example
+
+```groovy
+pipeline {
+    agent any
+    stages {
+        stage('Security Scan') {
+            steps {
+                sh 'npx security-scanner-mcp scan ./src --format json --output security-report.json --fail-on high'
+            }
+        }
+    }
+    post {
+        always {
+            archiveArtifacts artifacts: 'security-report.json', fingerprint: true
+        }
+    }
+}
+```
+
+### GitHub Actions Example
+
+```yaml
+name: Security Scan
+on: [push, pull_request]
+
+jobs:
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Security Scan
+        run: npx security-scanner-mcp scan ./src --format sarif --output results.sarif --fail-on critical
+
+      - name: Upload SARIF to GitHub
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: results.sarif
+```
+
+### GitLab CI Example
+
+```yaml
+security_scan:
+  stage: test
+  script:
+    - npx security-scanner-mcp scan ./src --format json --output gl-security-report.json --fail-on high
+  artifacts:
+    reports:
+      security: gl-security-report.json
+```
+
 ## Roadmap
 
 - [x] OWASP Top 10 based scanning
@@ -403,9 +499,9 @@ src/
 - [x] Advanced reporting (Mermaid, SARIF)
 - [x] External vulnerability DB integration (NVD, OWASP)
 - [x] Docker sandbox execution
-- [ ] GitHub Actions integration
+- [x] CLI mode (CI/CD pipeline integration)
+- [ ] GitHub Actions Marketplace
 - [ ] VS Code extension
-- [ ] CI/CD pipeline integration
 
 ## Contributing
 

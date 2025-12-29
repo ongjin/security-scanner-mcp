@@ -2,9 +2,9 @@
 sidebar_position: 2
 ---
 
-# Command Line Interface
+# CLI Mode
 
-Use Security Scanner MCP directly from the command line.
+Run Security Scanner MCP independently without Claude. Perfect for CI/CD pipelines like Jenkins, GitHub Actions, GitLab CI, and more.
 
 ## Installation
 
@@ -12,183 +12,324 @@ Use Security Scanner MCP directly from the command line.
 # Global installation
 npm install -g security-scanner-mcp
 
-# Or use npx
-npx security-scanner-mcp
+# Or use npx (no installation required)
+npx security-scanner-mcp scan ./src
 ```
 
-## Basic Commands
+## Commands
 
-### Version Information
+### scan
+
+Scan files or directories for security vulnerabilities.
 
 ```bash
-security-scanner-mcp --version
+# Scan a single file
+security-scanner-mcp scan ./src/app.js
+
+# Scan a directory
+security-scanner-mcp scan ./src
+
+# Scan with specific language
+security-scanner-mcp scan ./src --language typescript
 ```
 
-### Help
+### serve
+
+Start as MCP server (for Claude Desktop/Code).
 
 ```bash
-security-scanner-mcp --help
+security-scanner-mcp serve
 ```
 
-## Standalone Usage
+## Output Formats
 
-While Security Scanner MCP is designed to work with Claude Code, you can also use it programmatically:
+### Text (Default)
 
-```javascript
-import { scanSecrets, scanInjection, scanXss } from 'security-scanner-mcp';
+Human-readable output with colors and formatting.
 
-const code = `
-  const apiKey = "AIzaSyC1234567890";
-  const query = \`SELECT * FROM users WHERE id = \${userId}\`;
-`;
-
-// Scan for secrets
-const secretIssues = scanSecrets(code);
-
-// Scan for injection
-const injectionIssues = scanInjection(code, 'javascript');
-
-// Scan for XSS
-const xssIssues = scanXss(code, 'javascript');
-
-console.log('Total issues:', [
-  ...secretIssues,
-  ...injectionIssues,
-  ...xssIssues
-].length);
+```bash
+security-scanner-mcp scan ./src
 ```
+
+Example output:
+```
+════════════════════════════════════════
+       Security Scanner MCP Report
+════════════════════════════════════════
+
+📊 스캔 결과 요약
+────────────────────────────────────────
+   스캔된 파일: 5개
+   발견된 취약점: 3개
+
+   🔴 Critical: 1
+   🟠 High: 2
+   🟡 Medium: 0
+   🟢 Low: 0
+```
+
+### JSON
+
+Machine-readable format for parsing and automation.
+
+```bash
+security-scanner-mcp scan ./src --format json
+```
+
+Output structure:
+```json
+{
+  "summary": {
+    "totalFiles": 10,
+    "scannedFiles": 10,
+    "totalIssues": 5,
+    "critical": 1,
+    "high": 2,
+    "medium": 1,
+    "low": 1
+  },
+  "issues": [
+    {
+      "file": "./src/app.js",
+      "line": 15,
+      "severity": "critical",
+      "type": "Hardcoded API Key",
+      "message": "API key is hardcoded in source code",
+      "fix": "Use environment variables",
+      "owaspCategory": "A07:2021",
+      "cweId": "CWE-798"
+    }
+  ]
+}
+```
+
+### SARIF
+
+GitHub Code Scanning compatible format.
+
+```bash
+security-scanner-mcp scan ./src --format sarif --output report.sarif
+```
+
+## CLI Options
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `-f, --format <format>` | Output format (text, json, sarif) | text |
+| `-o, --output <file>` | Save results to file | - |
+| `-l, --language <lang>` | Programming language | auto |
+| `-s, --severity <level>` | Minimum severity filter | low |
+| `--fail-on <level>` | Exit code 1 if issues at this level | critical |
+| `--include <patterns>` | File patterns to include | *.js,*.ts,*.py,*.java,*.go |
+| `--exclude <patterns>` | Patterns to exclude | node_modules,dist,build,.git |
+| `--no-color` | Disable colored output | - |
+
+### Language Options
+
+- `auto` - Auto-detect based on file extension
+- `javascript` - JavaScript files
+- `typescript` - TypeScript files
+- `python` - Python files
+- `java` - Java files
+- `go` - Go files
+
+### Severity Levels
+
+- `critical` - Most severe vulnerabilities
+- `high` - High severity
+- `medium` - Medium severity
+- `low` - Low severity (informational)
 
 ## CI/CD Integration
+
+### Jenkins
+
+```groovy
+pipeline {
+    agent any
+
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('Security Scan') {
+            steps {
+                sh 'npm install -g security-scanner-mcp'
+                sh 'security-scanner-mcp scan ./src --format json --output security-report.json --fail-on high'
+            }
+        }
+    }
+
+    post {
+        always {
+            archiveArtifacts artifacts: 'security-report.json', fingerprint: true
+        }
+        failure {
+            echo 'Security vulnerabilities detected!'
+        }
+    }
+}
+```
 
 ### GitHub Actions
 
 ```yaml
 name: Security Scan
 
-on: [push, pull_request]
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
 
 jobs:
   security-scan:
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
 
-      - name: Install Security Scanner
-        run: npm install -g security-scanner-mcp
-
       - name: Run Security Scan
         run: |
-          # Scan all JavaScript files
-          find . -name "*.js" -not -path "*/node_modules/*" | while read file; do
-            echo "Scanning $file"
-            # Your scan logic here
-          done
+          npx security-scanner-mcp scan ./src \
+            --format sarif \
+            --output results.sarif \
+            --fail-on critical
+
+      - name: Upload SARIF to GitHub Security
+        uses: github/codeql-action/upload-sarif@v2
+        if: always()
+        with:
+          sarif_file: results.sarif
 ```
 
 ### GitLab CI
 
 ```yaml
-security-scan:
+stages:
+  - test
+  - security
+
+security_scan:
+  stage: security
   image: node:20-alpine
-  before_script:
-    - npm install -g security-scanner-mcp
   script:
-    - echo "Running security scans..."
-    # Add your scan commands
-  only:
-    - merge_requests
-    - main
+    - npm install -g security-scanner-mcp
+    - security-scanner-mcp scan ./src --format json --output gl-security-report.json --fail-on high
+  artifacts:
+    reports:
+      security: gl-security-report.json
+    paths:
+      - gl-security-report.json
+    when: always
+  allow_failure: false
 ```
 
-## Docker Usage
-
-### Direct Docker Run
-
-```bash
-# Pull image
-docker pull ongjin/security-scanner-mcp:latest
-
-# Scan a file
-docker run --rm \
-  -v $(pwd):/code:ro \
-  ongjin/security-scanner-mcp:latest \
-  scan /code/myfile.js
-```
-
-### Docker Compose
+### Azure DevOps
 
 ```yaml
-version: '3.8'
-services:
-  security-scanner:
-    image: ongjin/security-scanner-mcp:latest
-    volumes:
-      - ./src:/code:ro
-    command: scan /code
+trigger:
+  - main
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+steps:
+  - task: NodeTool@0
+    inputs:
+      versionSpec: '20.x'
+    displayName: 'Install Node.js'
+
+  - script: |
+      npm install -g security-scanner-mcp
+      security-scanner-mcp scan ./src --format json --output $(Build.ArtifactStagingDirectory)/security-report.json --fail-on high
+    displayName: 'Run Security Scan'
+
+  - task: PublishBuildArtifacts@1
+    inputs:
+      pathToPublish: '$(Build.ArtifactStagingDirectory)/security-report.json'
+      artifactName: 'SecurityReport'
+    condition: always()
 ```
 
-## Configuration Files
+### CircleCI
 
-### .securityscannerrc
+```yaml
+version: 2.1
 
-Create a configuration file in your project root:
+jobs:
+  security-scan:
+    docker:
+      - image: cimg/node:20.0
+    steps:
+      - checkout
+      - run:
+          name: Install Security Scanner
+          command: npm install -g security-scanner-mcp
+      - run:
+          name: Run Security Scan
+          command: |
+            security-scanner-mcp scan ./src \
+              --format json \
+              --output security-report.json \
+              --fail-on high
+      - store_artifacts:
+          path: security-report.json
+          destination: security-report
 
-```json
-{
-  "exclude": [
-    "node_modules/**",
-    "dist/**",
-    "*.test.js"
-  ],
-  "severity": {
-    "minLevel": "medium"
-  },
-  "rules": {
-    "secrets": true,
-    "injection": true,
-    "xss": true,
-    "crypto": true
-  }
-}
-```
-
-## Environment Variables
-
-Configure behavior with environment variables:
-
-```bash
-# Sandbox settings
-export SANDBOX_MEMORY=1g
-export SANDBOX_CPU=1.0
-export SANDBOX_TIMEOUT=60000
-
-# Scanner settings
-export SCANNER_VERBOSE=true
-export SCANNER_OUTPUT=json
+workflows:
+  version: 2
+  build-and-scan:
+    jobs:
+      - security-scan
 ```
 
 ## Exit Codes
 
-The CLI uses standard exit codes:
+| Code | Description |
+|------|-------------|
+| 0 | Success - No issues at or above `--fail-on` level |
+| 1 | Failure - Issues found at or above `--fail-on` level |
 
-- `0`: No vulnerabilities found
-- `1`: Vulnerabilities detected
-- `2`: Scan error
+## Examples
 
-Use in scripts:
+### Scan Only TypeScript Files
 
 ```bash
-#!/bin/bash
-security-scanner-mcp scan myfile.js
-if [ $? -eq 1 ]; then
-  echo "Vulnerabilities found!"
-  exit 1
-fi
+security-scanner-mcp scan ./src --include "*.ts,*.tsx"
+```
+
+### Exclude Test Files
+
+```bash
+security-scanner-mcp scan ./src --exclude "*.test.ts,*.spec.ts,__tests__"
+```
+
+### Show Only High and Critical Issues
+
+```bash
+security-scanner-mcp scan ./src --severity high
+```
+
+### Fail Build on Any High+ Issue
+
+```bash
+security-scanner-mcp scan ./src --fail-on high
+```
+
+### Generate Report for Code Review
+
+```bash
+security-scanner-mcp scan ./src --format json --output pr-security-report.json
 ```
 
 ## Pre-commit Hooks
@@ -199,40 +340,37 @@ fi
 # Install husky
 npm install --save-dev husky
 
+# Initialize husky
+npx husky init
+
 # Add pre-commit hook
-npx husky add .husky/pre-commit "npm run security-scan"
+echo 'npx security-scanner-mcp scan ./src --fail-on high' > .husky/pre-commit
 ```
+
+### Using lint-staged
 
 ```json
 // package.json
 {
-  "scripts": {
-    "security-scan": "security-scanner-mcp scan src/"
+  "lint-staged": {
+    "*.{js,ts}": [
+      "security-scanner-mcp scan --fail-on high"
+    ]
   }
 }
 ```
 
-## VS Code Integration
+## Docker Usage
 
-Create a VS Code task (`.vscode/tasks.json`):
+```bash
+# Pull image
+docker pull ongjin/security-scanner-mcp:latest
 
-```json
-{
-  "version": "2.0.0",
-  "tasks": [
-    {
-      "label": "Security Scan",
-      "type": "shell",
-      "command": "security-scanner-mcp",
-      "args": ["scan", "${file}"],
-      "presentation": {
-        "reveal": "always",
-        "panel": "new"
-      },
-      "problemMatcher": []
-    }
-  ]
-}
+# Scan local files
+docker run --rm \
+  -v $(pwd):/code:ro \
+  ongjin/security-scanner-mcp:latest \
+  scan /code/src --format json
 ```
 
 ## Next Steps

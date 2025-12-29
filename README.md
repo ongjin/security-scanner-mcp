@@ -394,6 +394,102 @@ src/
     └── docker-manager.ts      # Docker 실행 관리
 ```
 
+## 🖥️ CLI 모드 (CI/CD 통합)
+
+Claude 없이 독립적으로 실행할 수 있는 CLI 모드를 제공합니다. Jenkins, GitHub Actions, GitLab CI 등 어디서든 사용 가능합니다.
+
+### 기본 사용법
+
+```bash
+# 파일 스캔
+npx security-scanner-mcp scan ./src/app.js
+
+# 디렉토리 스캔
+npx security-scanner-mcp scan ./src
+
+# 결과를 파일로 저장
+npx security-scanner-mcp scan ./src --output report.txt
+```
+
+### 출력 포맷
+
+```bash
+# JSON 포맷 (파싱용)
+npx security-scanner-mcp scan ./src --format json
+
+# SARIF 포맷 (GitHub Code Scanning 호환)
+npx security-scanner-mcp scan ./src --format sarif --output report.sarif
+```
+
+### CI/CD 옵션
+
+```bash
+# Critical 취약점 발견 시 빌드 실패 (exit code 1)
+npx security-scanner-mcp scan ./src --fail-on critical
+
+# High 이상 취약점 발견 시 빌드 실패
+npx security-scanner-mcp scan ./src --fail-on high
+
+# 특정 파일만 포함
+npx security-scanner-mcp scan ./src --include "*.ts,*.js"
+
+# 특정 폴더 제외
+npx security-scanner-mcp scan ./src --exclude "node_modules,dist,test"
+```
+
+### Jenkins 예시
+
+```groovy
+pipeline {
+    agent any
+    stages {
+        stage('Security Scan') {
+            steps {
+                sh 'npx security-scanner-mcp scan ./src --format json --output security-report.json --fail-on high'
+            }
+        }
+    }
+    post {
+        always {
+            archiveArtifacts artifacts: 'security-report.json', fingerprint: true
+        }
+    }
+}
+```
+
+### GitHub Actions 예시
+
+```yaml
+name: Security Scan
+on: [push, pull_request]
+
+jobs:
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Security Scan
+        run: npx security-scanner-mcp scan ./src --format sarif --output results.sarif --fail-on critical
+
+      - name: Upload SARIF to GitHub
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: results.sarif
+```
+
+### GitLab CI 예시
+
+```yaml
+security_scan:
+  stage: test
+  script:
+    - npx security-scanner-mcp scan ./src --format json --output gl-security-report.json --fail-on high
+  artifacts:
+    reports:
+      security: gl-security-report.json
+```
+
 ## 로드맵
 
 - [x] OWASP Top 10 기반 검사
@@ -403,9 +499,9 @@ src/
 - [x] 고급 리포팅 (Mermaid, SARIF)
 - [x] 외부 취약점 DB 연동 (NVD, OWASP)
 - [x] Docker 샌드박스 실행
-- [ ] GitHub Actions 연동
+- [x] CLI 모드 (CI/CD 파이프라인 통합)
+- [ ] GitHub Actions Marketplace 등록
 - [ ] VS Code 확장
-- [ ] CI/CD 파이프라인 통합
 
 ## 기여하기
 
