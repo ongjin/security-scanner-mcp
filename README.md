@@ -320,11 +320,46 @@ Claude: [scan-in-sandbox 호출]
 
 악의적인 코드로부터 호스트를 보호하기 위해 Docker 격리 환경에서 스캔을 실행할 수 있습니다.
 
-```bash
-# Docker 이미지 빌드
-npm run docker:build
+### Docker 이미지 빌드
 
-# 샌드박스에서 스캔 실행 (Claude Code에서)
+#### 소스에서 빌드한 경우
+
+```bash
+npm run docker:build
+```
+
+#### npm으로 전역 설치한 경우
+
+```bash
+# 1. npm 전역 패키지 디렉토리 찾기
+npm root -g
+
+# 2. 해당 디렉토리의 security-scanner-mcp로 이동
+cd $(npm root -g)/security-scanner-mcp
+
+# 3. npm 패키지용 Dockerfile로 빌드
+npm run docker:build-npm
+```
+
+또는 **더 간단하게**:
+
+```bash
+# 어디서든 실행 가능
+npx security-scanner-mcp docker:build-npm
+```
+
+#### Docker Hub에서 pull (추천)
+
+```bash
+# 미리 빌드된 이미지 다운로드
+docker pull zerryth/security-scanner-mcp:latest
+docker tag zerryth/security-scanner-mcp:latest security-scanner-mcp:latest
+```
+
+### 샌드박스에서 스캔 실행
+
+Claude Code에서:
+```
 scan-in-sandbox 호출
 ```
 

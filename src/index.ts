@@ -462,29 +462,20 @@ server.registerTool(
 
             await fs.writeFile(tmpFile, code, 'utf-8');
 
-            // Docker에서 스캔 실행
+            // Docker에서 스캔 실행 (scanner-entrypoint.js 실행)
             const result = await dockerSandboxManager.run({
                 image: imageName,
-                command: [
-                    'node',
-                    '-e',
-                    `
-                    const fs = require('fs');
-                    const code = fs.readFileSync('/tmp/code.txt', 'utf-8');
-                    // 여기에서 스캔 실행 로직
-                    console.log('Scanning code...');
-                    console.log('Code length: ' + code.length);
-                    `
-                ],
+                command: [], // 기본 CMD 사용 (scanner-entrypoint.js)
                 env: {
                     NODE_ENV: 'production',
-                    SCANNER_LANGUAGE: language,
+                    SCAN_LANGUAGE: language,
+                    SCAN_CODE_FILE: '/tmp/code.txt',
                 },
                 cpuLimit,
                 memoryLimit,
                 timeout,
                 noNetwork: true,
-                readonlyRootfs: false, // 임시 파일 쓰기 필요
+                readonlyRootfs: false,
                 volumes: [
                     {
                         host: tmpFile,
@@ -505,10 +496,90 @@ server.registerTool(
                 response += '스캔이 제한 시간 내에 완료되지 않았습니다.\n';
             } else if (!result.success) {
                 response += `❌ **스캔 실패** (Exit Code: ${result.exitCode})\n\n`;
-                response += `**에러**:\n\`\`\`\n${result.stderr}\n\`\`\`\n`;
+                if (result.stderr) {
+                    response += `**에러**:\n\`\`\`\n${result.stderr}\n\`\`\`\n`;
+                }
             } else {
-                response += `✅ **스캔 완료**\n\n`;
-                response += `**출력**:\n\`\`\`\n${result.stdout}\n\`\`\`\n`;
+                // JSON 결과 파싱
+                try {
+                    const scanResult = JSON.parse(result.stdout);
+
+                    if (scanResult.success) {
+                        response += `✅ **스캔 완료**\n\n`;
+                        response += `- **언어**: ${scanResult.language}\n`;
+                        response += `- **발견된 취약점**: ${scanResult.issuesCount}개\n\n`;
+
+                        if (scanResult.issuesCount > 0) {
+                            // 심각도별 요약
+                            response += `### 📊 심각도별 통계\n\n`;
+                            response += `| 심각도 | 개수 |\n`;
+                            response += `|--------|------|\n`;
+                            if (scanResult.summary.critical > 0) {
+                                response += `| 🔴 Critical | ${scanResult.summary.critical} |\n`;
+                            }
+                            if (scanResult.summary.high > 0) {
+                                response += `| 🟠 High | ${scanResult.summary.high} |\n`;
+                            }
+                            if (scanResult.summary.medium > 0) {
+                                response += `| 🟡 Medium | ${scanResult.summary.medium} |\n`;
+                            }
+                            if (scanResult.summary.low > 0) {
+                                response += `| 🟢 Low | ${scanResult.summary.low} |\n`;
+                            }
+                            response += '\n';
+
+                            // 취약점 상세 목록
+                            response += `### 🔍 발견된 취약점\n\n`;
+
+                            const critical = scanResult.issues.filter((i: any) => i.severity === 'critical');
+                            const high = scanResult.issues.filter((i: any) => i.severity === 'high');
+                            const medium = scanResult.issues.filter((i: any) => i.severity === 'medium');
+                            const low = scanResult.issues.filter((i: any) => i.severity === 'low');
+
+                            if (critical.length > 0) {
+                                response += `#### 🔴 Critical (${critical.length}개)\n\n`;
+                                for (const issue of critical) {
+                                    response += `- **${issue.type}**${issue.line ? ` (라인 ${issue.line})` : ''}\n`;
+                                    response += `  - ${issue.message}\n`;
+                                    response += `  - 💡 해결책: ${issue.fix}\n\n`;
+                                }
+                            }
+
+                            if (high.length > 0) {
+                                response += `#### 🟠 High (${high.length}개)\n\n`;
+                                for (const issue of high) {
+                                    response += `- **${issue.type}**${issue.line ? ` (라인 ${issue.line})` : ''}\n`;
+                                    response += `  - ${issue.message}\n`;
+                                    response += `  - 💡 해결책: ${issue.fix}\n\n`;
+                                }
+                            }
+
+                            if (medium.length > 0) {
+                                response += `#### 🟡 Medium (${medium.length}개)\n\n`;
+                                for (const issue of medium) {
+                                    response += `- **${issue.type}**${issue.line ? ` (라인 ${issue.line})` : ''}\n`;
+                                    response += `  - ${issue.message}\n\n`;
+                                }
+                            }
+
+                            if (low.length > 0) {
+                                response += `#### 🟢 Low (${low.length}개)\n\n`;
+                                for (const issue of low) {
+                                    response += `- **${issue.type}**${issue.line ? ` (라인 ${issue.line})` : ''}\n`;
+                                    response += `  - ${issue.message}\n\n`;
+                                }
+                            }
+                        } else {
+                            response += `✨ **축하합니다!** 발견된 보안 취약점이 없습니다.\n\n`;
+                        }
+                    } else {
+                        response += `❌ **스캔 실패**\n\n`;
+                        response += `에러: ${scanResult.error}\n\n`;
+                    }
+                } catch (parseError) {
+                    response += `❌ **결과 파싱 실패**\n\n`;
+                    response += `원본 출력:\n\`\`\`\n${result.stdout}\n\`\`\`\n`;
+                }
             }
 
             response += `\n### 🔒 샌드박스 설정\n\n`;

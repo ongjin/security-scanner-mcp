@@ -11,7 +11,10 @@
     "files": [
         "dist",
         "README.md",
-        "LICENSE"
+        "README.en.md",
+        "LICENSE",
+        "Dockerfile.npm",
+        ".dockerignore"
     ],
     "scripts": {
         "build": "tsc",
@@ -21,6 +24,7 @@
         "prepublishOnly": "npm run build",
         "test": "node --test",
         "docker:build": "docker build -t security-scanner-mcp:latest .",
+        "docker:build-npm": "docker build -f Dockerfile.npm -t security-scanner-mcp:latest .",
         "docker:run": "docker run --rm security-scanner-mcp:latest"
     },
     "keywords": [

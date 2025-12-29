@@ -45,9 +45,6 @@ USER scanner
 # 환경 변수
 ENV NODE_ENV=production
 
-# 헬스체크
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD node -e "require('http').get('http://localhost:3000/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
-
-# MCP 서버 실행
-CMD ["node", "dist/index.js"]
+# 샌드박스 스캔 entrypoint를 기본 명령으로 설정
+# 호스트에서 실행 시 코드 파일 경로를 환경변수로 전달
+CMD ["node", "dist/sandbox/scanner-entrypoint.js"]

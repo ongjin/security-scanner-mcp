@@ -320,11 +320,46 @@ Claude: [calls scan-in-sandbox]
 
 Protect your host system from potentially malicious code by running scans in an isolated Docker environment.
 
-```bash
-# Build Docker image
-npm run docker:build
+### Build Docker Image
 
-# Run sandbox scan (from Claude Code)
+#### If built from source
+
+```bash
+npm run docker:build
+```
+
+#### If installed via npm globally
+
+```bash
+# 1. Find npm global package directory
+npm root -g
+
+# 2. Navigate to security-scanner-mcp
+cd $(npm root -g)/security-scanner-mcp
+
+# 3. Build using npm package Dockerfile
+npm run docker:build-npm
+```
+
+Or **more simply**:
+
+```bash
+# Run from anywhere
+npx security-scanner-mcp docker:build-npm
+```
+
+#### Pull from Docker Hub (Recommended)
+
+```bash
+# Download pre-built image
+docker pull zerryth/security-scanner-mcp:latest
+docker tag zerryth/security-scanner-mcp:latest security-scanner-mcp:latest
+```
+
+### Run Sandbox Scan
+
+From Claude Code:
+```
 scan-in-sandbox invocation
 ```
 

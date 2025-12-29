@@ -1,0 +1,30 @@
+# Dockerfile for npm-installed package
+# npm으로 설치한 패키지에서 사용하는 Dockerfile
+
+FROM node:20-alpine
+
+# 보안 강화
+RUN addgroup -g 1001 scanner && \
+    adduser -D -u 1001 -G scanner scanner
+
+WORKDIR /app
+
+# 현재 디렉토리의 파일 복사 (npm install 후의 node_modules/security-scanner-mcp)
+COPY package*.json ./
+COPY dist ./dist
+
+# 프로덕션 의존성 설치
+RUN npm ci --production && \
+    npm cache clean --force
+
+# 권한 설정
+RUN chown -R scanner:scanner /app
+
+# 비root 사용자로 전환
+USER scanner
+
+# 환경 변수
+ENV NODE_ENV=production
+
+# 샌드박스 스캔 entrypoint
+CMD ["node", "dist/sandbox/scanner-entrypoint.js"]
