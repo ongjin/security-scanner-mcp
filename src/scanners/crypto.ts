@@ -3,7 +3,17 @@
  * The Plain Password Storage pattern uses Pass-2 taint extension (#3).
  */
 
-import { SecurityIssue } from '../types.js';
+import * as t from '@babel/types';
+import type { SecurityIssue } from '../types.js';
+import {
+  parseCode,
+  walk,
+  analyzeTaint,
+  isTainted,
+  toIssue,
+  type ParseResult,
+  type SinkDefinition,
+} from '../utils/ast/index.js';
 import {
   lineOf,
   isCommentLine,
@@ -59,8 +69,98 @@ const TAINT_AWARE_PATTERNS: TaintAwarePattern[] = [
   },
 ];
 
+const PLAIN_PASSWORD_SINK: SinkDefinition = {
+  name: 'Plain Password Storage',
+  kind: 'sql',
+  matches: () => false,
+  argIndex: -1,
+  severity: 'high',
+  message: '비밀번호를 해싱 없이 저장하려는 것 같습니다.',
+  fix: 'bcrypt.hash() 또는 argon2로 해싱한 후 저장하세요.',
+  owaspCategory: 'A02:2021 – Cryptographic Failures',
+  cweId: 'CWE-256',
+};
+
 export function scanCrypto(code: string, language: string): SecurityIssue[] {
   const lang = language as Language;
+  if (lang === 'javascript' || lang === 'typescript') {
+    const parsed = parseCode(code, lang);
+    if (parsed) return scanCryptoAST(code, parsed);
+  }
+
+  return scanCryptoRegex(code, lang);
+}
+
+function scanCryptoAST(code: string, parsed: ParseResult): SecurityIssue[] {
+  const taint = analyzeTaint(parsed);
+  const issues: SecurityIssue[] = [];
+
+  walk(parsed.file, (node, parent) => {
+    const taintedValue = getPlainPasswordStorageValue(node, parent);
+    if (!taintedValue) return;
+    if (!isTainted(taintedValue, taint)) return;
+
+    issues.push(toIssue(node, PLAIN_PASSWORD_SINK, code));
+  });
+
+  return mergeRegexFindings(issues, scanCryptoRegex(code, parsed.language));
+}
+
+function getPlainPasswordStorageValue(node: t.Node, parent?: t.Node | null): t.Node | null {
+  if (t.isAssignmentExpression(node) && node.operator === '=' && isPasswordLhs(node.left)) {
+    return node.right;
+  }
+
+  if (
+    t.isObjectProperty(node) &&
+    parent &&
+    t.isObjectExpression(parent) &&
+    isPasswordProperty(node.key, node.computed) &&
+    t.isExpression(node.value)
+  ) {
+    return node.value;
+  }
+
+  return null;
+}
+
+function isPasswordLhs(node: t.Node): boolean {
+  if (t.isIdentifier(node)) return node.name === 'password';
+  if (!t.isMemberExpression(node)) return false;
+
+  return isPasswordProperty(node.property, node.computed);
+}
+
+function isPasswordProperty(node: t.Node, computed: boolean): boolean {
+  if (computed) return t.isStringLiteral(node) && node.value === 'password';
+  if (t.isIdentifier(node)) return node.name === 'password';
+  return t.isStringLiteral(node) && node.value === 'password';
+}
+
+function mergeRegexFindings(
+  astIssues: SecurityIssue[],
+  regexIssues: SecurityIssue[]
+): SecurityIssue[] {
+  const issues = [...astIssues];
+  const seen = new Set(issues.map(issueKey));
+
+  for (const issue of regexIssues) {
+    if (issue.type === PLAIN_PASSWORD_SINK.name) continue;
+
+    const key = issueKey(issue);
+    if (seen.has(key)) continue;
+
+    issues.push(issue);
+  }
+
+  return issues;
+}
+
+function issueKey(issue: SecurityIssue): string {
+  return `${issue.type}:${issue.line}:${issue.match}`;
+}
+
+function scanCryptoRegex(code: string, lang: Language): SecurityIssue[] {
   const issues: SecurityIssue[] = [];
   const lines = code.split('\n');
   const tainted = collectTaintedVars(code, lang);
