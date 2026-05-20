@@ -72,3 +72,28 @@ export function isInBlockComment(code: string, charIndex: number): boolean {
   }
   return false;
 }
+
+/**
+ * Returns the line with any trailing line-comment removed.
+ * Quote-aware: // or # inside "..."/'...'/`...` is preserved.
+ */
+export function stripInlineComments(line: string, language: Language): string {
+  const marker = language === 'python' ? '#' : '//';
+  let inString: string | null = null;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (inString) {
+      if (ch === '\\') { i++; continue; }
+      if (ch === inString) inString = null;
+      continue;
+    }
+    if (ch === '"' || ch === "'" || ch === '`') {
+      inString = ch;
+      continue;
+    }
+    if (line.startsWith(marker, i)) {
+      return line.slice(0, i);
+    }
+  }
+  return line;
+}

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { lineOf, isCommentLine, isInBlockComment } from '../source-helpers.js';
+import { lineOf, isCommentLine, isInBlockComment, stripInlineComments } from '../source-helpers.js';
 
 test('lineOf: index 0 returns line 1', () => {
   assert.equal(lineOf('abc', 0), 1);
@@ -89,4 +89,42 @@ test('isInBlockComment: unterminated block treats rest of file as comment', () =
 
 test('isInBlockComment: nothing returns false', () => {
   assert.equal(isInBlockComment('plain code', 5), false);
+});
+
+test('stripInlineComments: removes JS // tail', () => {
+  assert.equal(stripInlineComments('const x = 1; // tail', 'javascript'), 'const x = 1; ');
+});
+
+test('stripInlineComments: removes Python # tail', () => {
+  assert.equal(stripInlineComments('x = 1  # tail', 'python'), 'x = 1  ');
+});
+
+test('stripInlineComments: preserves // inside double-quoted string', () => {
+  assert.equal(
+    stripInlineComments('const url = "http://example.com";', 'javascript'),
+    'const url = "http://example.com";'
+  );
+});
+
+test('stripInlineComments: preserves // inside single-quoted string', () => {
+  assert.equal(
+    stripInlineComments(`const url = 'http://example.com';`, 'javascript'),
+    `const url = 'http://example.com';`
+  );
+});
+
+test('stripInlineComments: preserves // inside template literal', () => {
+  assert.equal(
+    stripInlineComments('const url = `http://example.com`;', 'javascript'),
+    'const url = `http://example.com`;'
+  );
+});
+
+test('stripInlineComments: line without comment is returned unchanged', () => {
+  assert.equal(stripInlineComments('const x = 1;', 'javascript'), 'const x = 1;');
+});
+
+test('stripInlineComments: handles escaped quote inside string', () => {
+  const input = `const s = "a\\"// not a comment";`;
+  assert.equal(stripInlineComments(input, 'javascript'), input);
 });
