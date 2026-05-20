@@ -9,6 +9,12 @@
  */
 
 import { SecurityIssue } from '../types.js';
+import {
+  lineOf,
+  isCommentLine,
+  isInBlockComment,
+  Language,
+} from '../utils/source-helpers.js';
 
 interface XssPattern {
     name: string;
@@ -160,13 +166,12 @@ export function scanXss(code: string, language: string): SecurityIssue[] {
         const matches = code.matchAll(pattern.pattern);
 
         for (const match of matches) {
-            const lineNumber = findLineNumber(code, match.index || 0);
-            const line = lines[lineNumber - 1] || '';
+            const matchIndex = match.index ?? 0;
+            const lineNumber = lineOf(code, matchIndex);
+            const line = lines[lineNumber - 1] ?? '';
 
-            // 주석 스킵
-            if (isComment(line, language)) {
-                continue;
-            }
+            if (isCommentLine(line, language as Language)) continue;
+            if (isInBlockComment(code, matchIndex)) continue;
 
             // 이미 sanitize 되어있는지 체크 (간단한 휴리스틱)
             if (hasSanitization(line)) {
@@ -223,20 +228,4 @@ function hasSanitization(line: string): boolean {
 
     const lowerLine = line.toLowerCase();
     return sanitizePatterns.some(p => lowerLine.includes(p));
-}
-
-function findLineNumber(code: string, index: number): number {
-    const beforeMatch = code.slice(0, index);
-    return (beforeMatch.match(/\n/g) || []).length + 1;
-}
-
-function isComment(line: string, language: string): boolean {
-    const trimmed = line.trim();
-
-    switch (language) {
-        case 'python':
-            return trimmed.startsWith('#');
-        default:
-            return trimmed.startsWith('//') || trimmed.startsWith('/*') || trimmed.startsWith('*');
-    }
 }
