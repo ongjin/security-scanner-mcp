@@ -97,3 +97,46 @@ export function stripInlineComments(line: string, language: Language): string {
   }
   return line;
 }
+
+const PLACEHOLDER_PHRASES = [
+  'example',
+  'placeholder',
+  '<your',
+  'your_',
+  'your-',
+  'xxxxxxxx',
+  'changeme',
+  'dummy',
+  'sample_',
+  'fake_',
+  'replace_me',
+  'replaceme',
+  'todo',
+];
+
+/**
+ * Whether `value` looks like a placeholder rather than a real secret.
+ * Operates on the matched secret VALUE, not on the surrounding line text.
+ */
+export function isPlaceholderValue(value: string): boolean {
+  if (value.length === 0) return false;
+  const lower = value.toLowerCase();
+  for (const p of PLACEHOLDER_PHRASES) {
+    if (lower.includes(p)) return true;
+  }
+  if (value.length >= 6 && /^(.)\1+$/.test(value)) return true;
+  if (value.length >= 8 && shannonEntropy(value) < 2.0) return true;
+  return false;
+}
+
+function shannonEntropy(s: string): number {
+  const counts = new Map<string, number>();
+  for (const c of s) counts.set(c, (counts.get(c) || 0) + 1);
+  let h = 0;
+  const n = s.length;
+  for (const c of counts.values()) {
+    const p = c / n;
+    h -= p * Math.log2(p);
+  }
+  return h;
+}

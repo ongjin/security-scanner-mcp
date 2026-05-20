@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { lineOf, isCommentLine, isInBlockComment, stripInlineComments } from '../source-helpers.js';
+import { lineOf, isCommentLine, isInBlockComment, stripInlineComments, isPlaceholderValue } from '../source-helpers.js';
 
 test('lineOf: index 0 returns line 1', () => {
   assert.equal(lineOf('abc', 0), 1);
@@ -127,4 +127,35 @@ test('stripInlineComments: line without comment is returned unchanged', () => {
 test('stripInlineComments: handles escaped quote inside string', () => {
   const input = `const s = "a\\"// not a comment";`;
   assert.equal(stripInlineComments(input, 'javascript'), input);
+});
+
+test('isPlaceholderValue: obvious placeholder phrases', () => {
+  assert.equal(isPlaceholderValue('your_api_key_here'), true);
+  assert.equal(isPlaceholderValue('<your-token>'), true);
+  assert.equal(isPlaceholderValue('CHANGEME'), true);
+  assert.equal(isPlaceholderValue('example-key'), true);
+  assert.equal(isPlaceholderValue('placeholder-value'), true);
+  assert.equal(isPlaceholderValue('dummy123'), true);
+});
+
+test('isPlaceholderValue: all-same-character runs', () => {
+  assert.equal(isPlaceholderValue('xxxxxxxx'), true);
+  assert.equal(isPlaceholderValue('00000000'), true);
+});
+
+test('isPlaceholderValue: low-entropy strings', () => {
+  assert.equal(isPlaceholderValue('aaaaaaaabbbbbbbb'), true);
+});
+
+test('isPlaceholderValue: real-looking AWS key is NOT placeholder', () => {
+  assert.equal(isPlaceholderValue('AKIAIOSFODNN7EXAMPLE'), true);
+  assert.equal(isPlaceholderValue('AKIAJ7VKQ3X5C9Z2N1W4'), false);
+});
+
+test('isPlaceholderValue: short random-looking strings are not placeholders', () => {
+  assert.equal(isPlaceholderValue('Xy3Lk9mP2Qr8Wn5T'), false);
+});
+
+test('isPlaceholderValue: empty string is not a placeholder', () => {
+  assert.equal(isPlaceholderValue(''), false);
 });
