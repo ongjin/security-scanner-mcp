@@ -8,12 +8,19 @@
  * @author zerry
  */
 
-import { SecurityIssue } from '../types.js';
+import * as t from '@babel/types';
+import type { SecurityIssue } from '../types.js';
 import {
-  lineOf,
-  isCommentLine,
-  isInBlockComment,
-  Language,
+    parseCode, walk,
+    INNERHTML_SINKS,
+    toIssue,
+    type ParseResult,
+} from '../utils/ast/index.js';
+import {
+    lineOf,
+    isCommentLine,
+    isInBlockComment,
+    type Language,
 } from '../utils/source-helpers.js';
 
 interface XssPattern {
@@ -21,8 +28,10 @@ interface XssPattern {
     pattern: RegExp;
     message: string;
     fix: string;
-    languages: string[];
+    languages: Language[];
 }
+
+const INNERHTML_ASSIGNMENT_TYPE = 'innerHTML Assignment';
 
 /**
  * XSS 취약점 패턴 정의
@@ -136,7 +145,7 @@ const XSS_PATTERNS: XssPattern[] = [
         pattern: /\beval\s*\(/gi,
         message: 'eval()은 코드 인젝션에 취약합니다.',
         fix: 'eval() 대신 JSON.parse(), Function constructor 등 더 안전한 대안을 사용하세요.',
-        languages: ['javascript', 'typescript'],
+        languages: ['javascript', 'typescript', 'python'],
     },
     {
         name: 'new Function()',
@@ -151,12 +160,554 @@ const XSS_PATTERNS: XssPattern[] = [
  * XSS 취약점을 검사합니다.
  */
 export function scanXss(code: string, language: string): SecurityIssue[] {
+    const lang = language as Language;
+    if (lang === 'javascript' || lang === 'typescript') {
+        const parsed = parseCode(code, lang);
+        if (parsed) {
+            return scanXssAST(code, parsed);
+        }
+        return mergeParseFailureRegexFindings(code, scanXssRegex(code, lang), lang);
+    }
+
+    return scanXssRegex(code, lang);
+}
+
+function scanXssAST(code: string, parsed: ParseResult): SecurityIssue[] {
+    const issues: SecurityIssue[] = [];
+    const lines = code.split('\n');
+    const innerHtmlDef = INNERHTML_SINKS[0];
+
+    walk(parsed.file, (node) => {
+        if (!t.isAssignmentExpression(node)) return;
+
+        const rhs = matchInnerHtmlAssignmentLocal(node);
+        if (!rhs) return;
+        if (isStaticAstRhs(rhs)) return;
+        const line = node.loc?.start.line ? lines[node.loc.start.line - 1] ?? '' : '';
+        if (hasSanitization(line)) return;
+
+        issues.push(toInnerHtmlAssignmentIssue(node, innerHtmlDef, code));
+    });
+
+    return mergeRegexFindings(issues, scanXssRegex(code, parsed.language));
+}
+
+function mergeRegexFindings(
+    astIssues: SecurityIssue[],
+    regexIssues: SecurityIssue[]
+): SecurityIssue[] {
+    const issues = [...astIssues];
+    const seen = new Set(issues.map(issueKey));
+
+    for (const issue of regexIssues) {
+        if (isInnerHtmlAssignmentIssue(issue)) continue;
+
+        const key = issueKey(issue);
+        if (seen.has(key)) continue;
+
+        issues.push(issue);
+    }
+
+    return issues;
+}
+
+function issueKey(issue: SecurityIssue): string {
+    return `${issue.type}:${issue.line}:${issue.match}`;
+}
+
+function mergeParseFailureRegexFindings(
+    code: string,
+    regexIssues: SecurityIssue[],
+    lang: Language
+): SecurityIssue[] {
+    const issues = regexIssues.filter(issue => !isInnerHtmlAssignmentIssue(issue));
+    return [...issues, ...scanInnerHtmlAssignmentsFallback(code, lang)];
+}
+
+function isInnerHtmlAssignmentIssue(issue: SecurityIssue): boolean {
+    return issue.type === INNERHTML_ASSIGNMENT_TYPE;
+}
+
+function scanInnerHtmlAssignmentsFallback(code: string, lang: Language): SecurityIssue[] {
+    const pattern = XSS_PATTERNS.find(p => p.name === INNERHTML_ASSIGNMENT_TYPE);
+    if (!pattern) return [];
+
+    const issues: SecurityIssue[] = [];
+    const lines = code.split('\n');
+    const assignmentPattern = /\.innerHTML\s*=/g;
+    let match: RegExpExecArray | null;
+
+    while ((match = assignmentPattern.exec(code)) !== null) {
+        const matchIndex = match.index;
+        const lineNumber = lineOf(code, matchIndex);
+        const line = lines[lineNumber - 1] ?? '';
+        const parsed = readAssignmentRhs(code, assignmentPattern.lastIndex);
+        if (!parsed) continue;
+
+        if (isCommentLine(line, lang)) continue;
+        if (isInBlockComment(code, matchIndex)) continue;
+        if (hasSanitization(line)) continue;
+        if (isStaticLiteralRhs(parsed.rhs)) continue;
+
+        issues.push({
+            type: pattern.name,
+            severity: getSeverity(pattern.name),
+            message: pattern.message,
+            fix: pattern.fix,
+            line: lineNumber,
+            match: code.slice(matchIndex, parsed.endIndex),
+            owaspCategory: 'A03:2021 – Injection',
+            cweId: 'CWE-79',
+        });
+    }
+
+    return issues;
+}
+
+function isStaticAstRhs(rhs: t.Expression): boolean {
+    const unwrapped = unwrapStaticAstRhs(rhs);
+    return t.isStringLiteral(unwrapped) ||
+        (t.isTemplateLiteral(unwrapped) && unwrapped.expressions.length === 0);
+}
+
+function unwrapStaticAstRhs(rhs: t.Expression): t.Expression {
+    let current = rhs;
+
+    while (true) {
+        if (t.isParenthesizedExpression(current)) {
+            current = current.expression;
+            continue;
+        }
+        if (t.isTSAsExpression(current)) {
+            current = current.expression;
+            continue;
+        }
+        if (t.isTSSatisfiesExpression(current)) {
+            current = current.expression;
+            continue;
+        }
+        if (t.isTSTypeAssertion(current)) {
+            current = current.expression;
+            continue;
+        }
+        if (t.isTSNonNullExpression(current)) {
+            current = current.expression;
+            continue;
+        }
+        return current;
+    }
+}
+
+function readAssignmentRhs(
+    code: string,
+    startIndex: number
+): { rhs: string; endIndex: number } | null {
+    let index = startIndex;
+    while (index < code.length && /\s/.test(code[index])) {
+        index++;
+    }
+
+    if (index >= code.length) {
+        return null;
+    }
+
+    const endIndex = readUntilAssignmentBoundary(code, index);
+    return {
+        rhs: code.slice(index, endIndex).trim(),
+        endIndex,
+    };
+}
+
+function readUntilAssignmentBoundary(code: string, startIndex: number): number {
+    let depth = 0;
+    let inString: string | null = null;
+    let escaped = false;
+
+    for (let index = startIndex; index < code.length; index++) {
+        const ch = code[index];
+
+        if (inString) {
+            if (escaped) {
+                escaped = false;
+                continue;
+            }
+            if (ch === '\\') {
+                escaped = true;
+                continue;
+            }
+            if (ch === inString) {
+                inString = null;
+            }
+            continue;
+        }
+
+        if (ch === '\'' || ch === '"' || ch === '`') {
+            inString = ch;
+            continue;
+        }
+
+        if (ch === '(') {
+            depth++;
+            continue;
+        }
+        if (ch === ')' && depth > 0) {
+            depth--;
+            continue;
+        }
+        if (ch === ';' && depth === 0) {
+            return index;
+        }
+    }
+
+    return code.length;
+}
+
+function isStaticLiteralRhs(rhs: string): boolean {
+    const unwrapped = normalizeStaticRhs(rhs);
+    if (unwrapped.length === 0) return false;
+    if (isStaticStringLiteral(unwrapped)) return true;
+    return isStaticTemplateLiteral(unwrapped);
+}
+
+function normalizeStaticRhs(rhs: string): string {
+    let current = rhs.trim();
+
+    while (true) {
+        const before = current;
+        current = unwrapParenthesizedRhs(current);
+        current = stripLeadingAngleAssertion(current);
+        current = stripStaticLiteralTsSuffix(current);
+        if (current === before) return current;
+    }
+}
+
+function stripLeadingAngleAssertion(rhs: string): string {
+    if (!rhs.startsWith('<')) return rhs;
+
+    let depth = 0;
+    for (let i = 0; i < rhs.length; i++) {
+        const ch = rhs[i];
+        if (ch === '<') {
+            depth++;
+            continue;
+        }
+        if (ch === '>') {
+            depth--;
+            if (depth === 0) {
+                const rest = rhs.slice(i + 1).trim();
+                if (startsStaticRhsCandidate(rest)) return rest;
+                return rhs;
+            }
+        }
+    }
+
+    return rhs;
+}
+
+function stripStaticLiteralTsSuffix(rhs: string): string {
+    const expressionEnd = readLeadingStaticExpressionEnd(rhs);
+    if (expressionEnd === -1) return rhs;
+
+    const suffix = rhs.slice(expressionEnd).trim();
+    if (suffix.length === 0) return rhs;
+    if (/^!+$/.test(suffix)) return rhs.slice(0, expressionEnd).trim();
+    if (isStaticTsAssertionSuffix(suffix)) {
+        return rhs.slice(0, expressionEnd).trim();
+    }
+
+    return rhs;
+}
+
+function isStaticTsAssertionSuffix(suffix: string): boolean {
+    const assertion = /^!*\s*(?:as|satisfies)\b([\s\S]+)$/.exec(suffix);
+    if (!assertion) return false;
+
+    const typeText = assertion[1].trim();
+    return typeText.length > 0 && !hasTopLevelRuntimeContinuation(typeText);
+}
+
+function hasTopLevelRuntimeContinuation(value: string): boolean {
+    let parenDepth = 0;
+    let bracketDepth = 0;
+    let braceDepth = 0;
+    let angleDepth = 0;
+    let inString: string | null = null;
+    let escaped = false;
+
+    for (let i = 0; i < value.length; i++) {
+        const ch = value[i];
+        if (inString) {
+            if (escaped) {
+                escaped = false;
+                continue;
+            }
+            if (ch === '\\') {
+                escaped = true;
+                continue;
+            }
+            if (ch === inString) {
+                inString = null;
+            }
+            continue;
+        }
+
+        if (ch === '\'' || ch === '"' || ch === '`') {
+            inString = ch;
+            continue;
+        }
+
+        if (ch === '(') {
+            parenDepth++;
+            continue;
+        }
+        if (ch === ')' && parenDepth > 0) {
+            parenDepth--;
+            continue;
+        }
+        if (ch === '[') {
+            bracketDepth++;
+            continue;
+        }
+        if (ch === ']' && bracketDepth > 0) {
+            bracketDepth--;
+            continue;
+        }
+        if (ch === '{') {
+            braceDepth++;
+            continue;
+        }
+        if (ch === '}' && braceDepth > 0) {
+            braceDepth--;
+            continue;
+        }
+        if (ch === '<') {
+            angleDepth++;
+            continue;
+        }
+        if (ch === '>' && angleDepth > 0) {
+            angleDepth--;
+            continue;
+        }
+        if (
+            ch === '+' &&
+            parenDepth === 0 &&
+            bracketDepth === 0 &&
+            braceDepth === 0 &&
+            angleDepth === 0
+        ) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+function readLeadingStaticExpressionEnd(rhs: string): number {
+    const literalEnd = readLeadingLiteralEnd(rhs);
+    if (literalEnd !== -1) return literalEnd;
+    if (!rhs.startsWith('(')) return -1;
+    return readBalancedParenthesizedPrefixEnd(rhs);
+}
+
+function startsStaticRhsCandidate(rhs: string): boolean {
+    return rhs.startsWith('\'') || rhs.startsWith('"') || rhs.startsWith('`') || rhs.startsWith('(');
+}
+
+function readLeadingLiteralEnd(rhs: string): number {
+    const quote = rhs[0];
+    if (quote !== '\'' && quote !== '"' && quote !== '`') return -1;
+
+    let escaped = false;
+    for (let i = 1; i < rhs.length; i++) {
+        const ch = rhs[i];
+        if (escaped) {
+            escaped = false;
+            continue;
+        }
+        if (ch === '\\') {
+            escaped = true;
+            continue;
+        }
+        if (ch === quote) return i + 1;
+    }
+
+    return -1;
+}
+
+function readBalancedParenthesizedPrefixEnd(value: string): number {
+    let depth = 0;
+    let inString: string | null = null;
+    let escaped = false;
+
+    for (let i = 0; i < value.length; i++) {
+        const ch = value[i];
+        if (inString) {
+            if (escaped) {
+                escaped = false;
+                continue;
+            }
+            if (ch === '\\') {
+                escaped = true;
+                continue;
+            }
+            if (ch === inString) {
+                inString = null;
+            }
+            continue;
+        }
+
+        if (ch === '\'' || ch === '"' || ch === '`') {
+            inString = ch;
+            continue;
+        }
+
+        if (ch === '(') {
+            depth++;
+            continue;
+        }
+
+        if (ch === ')') {
+            depth--;
+            if (depth === 0) return i + 1;
+            if (depth < 0) return -1;
+        }
+    }
+
+    return -1;
+}
+
+function unwrapParenthesizedRhs(rhs: string): string {
+    let current = rhs;
+
+    while (current.startsWith('(') && current.endsWith(')') && hasBalancedOuterParens(current)) {
+        current = current.slice(1, -1).trim();
+    }
+
+    return current;
+}
+
+function hasBalancedOuterParens(value: string): boolean {
+    let depth = 0;
+    let inString: string | null = null;
+    let escaped = false;
+
+    for (let i = 0; i < value.length; i++) {
+        const ch = value[i];
+        if (inString) {
+            if (escaped) {
+                escaped = false;
+                continue;
+            }
+            if (ch === '\\') {
+                escaped = true;
+                continue;
+            }
+            if (ch === inString) {
+                inString = null;
+            }
+            continue;
+        }
+
+        if (ch === '\'' || ch === '"' || ch === '`') {
+            inString = ch;
+            continue;
+        }
+
+        if (ch === '(') {
+            depth++;
+            continue;
+        }
+
+        if (ch === ')') {
+            depth--;
+            if (depth === 0 && i < value.length - 1) return false;
+            if (depth < 0) return false;
+        }
+    }
+
+    return depth === 0;
+}
+
+function isStaticStringLiteral(rhs: string): boolean {
+    const quote = rhs[0];
+    if (quote !== '\'' && quote !== '"') return false;
+    if (rhs[rhs.length - 1] !== quote) return false;
+
+    let escaped = false;
+    for (let i = 1; i < rhs.length - 1; i++) {
+        const ch = rhs[i];
+        if (escaped) {
+            escaped = false;
+            continue;
+        }
+        if (ch === '\\') {
+            escaped = true;
+            continue;
+        }
+        if (ch === quote) return false;
+    }
+
+    return true;
+}
+
+function isStaticTemplateLiteral(rhs: string): boolean {
+    if (!rhs.startsWith('`') || !rhs.endsWith('`')) return false;
+
+    let escaped = false;
+    for (let i = 1; i < rhs.length - 1; i++) {
+        const ch = rhs[i];
+        if (escaped) {
+            escaped = false;
+            continue;
+        }
+        if (ch === '\\') {
+            escaped = true;
+            continue;
+        }
+        if (ch === '$' && rhs[i + 1] === '{') {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+function matchInnerHtmlAssignmentLocal(node: t.AssignmentExpression): t.Expression | null {
+    if (node.operator !== '=') return null;
+    if (!t.isMemberExpression(node.left)) return null;
+    if (node.left.computed) {
+        if (t.isStringLiteral(node.left.property) && node.left.property.value === 'innerHTML') {
+            return node.right;
+        }
+        return null;
+    }
+    if (!t.isIdentifier(node.left.property)) return null;
+    return node.left.property.name === 'innerHTML' ? node.right : null;
+}
+
+function toInnerHtmlAssignmentIssue(
+    node: t.AssignmentExpression,
+    innerHtmlDef: typeof INNERHTML_SINKS[0],
+    code: string
+): SecurityIssue {
+    const base = toIssue(node, innerHtmlDef, code);
+    const pattern = XSS_PATTERNS.find(p => p.name === INNERHTML_ASSIGNMENT_TYPE);
+    return {
+        ...base,
+        type: INNERHTML_ASSIGNMENT_TYPE,
+        severity: getSeverity(INNERHTML_ASSIGNMENT_TYPE),
+        message: pattern?.message ?? base.message,
+        fix: pattern?.fix ?? base.fix,
+    };
+}
+
+function scanXssRegex(code: string, lang: Language): SecurityIssue[] {
     const issues: SecurityIssue[] = [];
     const lines = code.split('\n');
 
     // 해당 언어에 적용되는 패턴만 필터링
     const applicablePatterns = XSS_PATTERNS.filter(
-        p => p.languages.includes(language)
+        p => p.languages.includes(lang)
     );
 
     for (const pattern of applicablePatterns) {
@@ -170,7 +721,7 @@ export function scanXss(code: string, language: string): SecurityIssue[] {
             const lineNumber = lineOf(code, matchIndex);
             const line = lines[lineNumber - 1] ?? '';
 
-            if (isCommentLine(line, language as Language)) continue;
+            if (isCommentLine(line, lang)) continue;
             if (isInBlockComment(code, matchIndex)) continue;
 
             // 이미 sanitize 되어있는지 체크 (간단한 휴리스틱)
