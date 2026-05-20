@@ -34,6 +34,8 @@ AIコード生成ツールは強力ですが、セキュリティ脆弱性を含
 - ファイルとパスの脆弱性
 - 脆弱な依存関係
 
+1.2.0以降、JavaScript / TypeScriptのinjection、XSS、crypto、auth、pathスキャナーはASTベースの検出を使用します。関数パラメータのtaintと複数段階の変数フローを追跡し、Python / Java / GoとJS/TSのパース失敗時は従来のregexパスを使用します。
+
 ### インフラストラクチャ・アズ・コード（IaC）スキャン
 
 - **Dockerfile**: CIS Dockerベンチマークに基づく15以上のルール
@@ -55,10 +57,16 @@ const apiKey = "AIzaSyC1234567890abcdef";
 const query = `SELECT * FROM users WHERE id = ${userId}`;
 element.innerHTML = userInput;
 
+function findUser(input) {
+  db.query(`SELECT * FROM users WHERE id = ${input}`);
+}
+findUser(req.body.userId);
+
 // Claudeが検出:
 // 🔴 Critical: Google APIキーがハードコード
 // 🟠 High: テンプレートリテラルによるSQL インジェクション
 // 🟠 High: innerHTMLへの代入によるXSS
+// 🟠 High: 関数パラメータtaintがSQL sinkに到達
 ```
 
 ## 次のステップ

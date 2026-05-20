@@ -16,6 +16,11 @@ Me: Scan this code for security issues
 const apiKey = "AIzaSyC1234567890abcdef";
 const query = `SELECT * FROM users WHERE id = ${userId}`;
 element.innerHTML = userInput;
+
+function findUser(input) {
+  db.query(`SELECT * FROM users WHERE id = ${input}`);
+}
+findUser(req.body.userId);
 ```
 
 Claude will call `scan-security` and show:
@@ -36,7 +41,13 @@ Claude will call `scan-security` and show:
 - **innerHTML Assignment** (line 3)
   - Dynamic value assigned to innerHTML
   - 💡 Fix: Use textContent or sanitize with DOMPurify
+
+- **SQL query with user input** (line 6)
+  - Function parameter taint reaches a SQL sink
+  - 💡 Fix: Use prepared statements
 ```
+
+Security Scanner MCP 1.2.0 uses AST-aware detection for JavaScript and TypeScript, so function parameters and multi-hop variable chains are detected. Literal HTML assigned to `innerHTML`, such as `el.innerHTML = '<div>safe</div>'`, is not reported as XSS.
 
 ## Step 2: Get Auto-Fix Suggestions
 

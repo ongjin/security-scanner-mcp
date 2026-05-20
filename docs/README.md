@@ -54,11 +54,11 @@ docs/
 
 ## Multi-language Support
 
-The site is configured for multi-language support:
+The site is configured and populated for multi-language support:
 - English (default)
-- Korean (todo)
-- Japanese (todo)
-- Chinese (todo)
+- Korean
+- Japanese
+- Chinese
 
 To add translations, create files in `i18n/{locale}/docusaurus-plugin-content-docs/current/`.
 

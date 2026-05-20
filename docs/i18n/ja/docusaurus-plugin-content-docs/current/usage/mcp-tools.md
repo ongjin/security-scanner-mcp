@@ -22,6 +22,7 @@ Me: このコードをセキュリティの問題についてスキャンして�
 - 7つのスキャナーを同時に実行
 - 結果を組み合わせる
 - 包括的なレポートを返す
+- JavaScript / TypeScriptではASTベース検出を使い、関数パラメータtaintと複数段階の変数フローを追跡
 
 ### scan-secrets
 
@@ -48,6 +49,7 @@ Me: このコードにハードコードされたシークレットがないか�
 - NoSQLインジェクション（MongoDB）
 - コマンドインジェクション（exec、spawn、system）
 - LDAPインジェクション
+- JavaScript / TypeScriptの関数パラメータと複数段階taintフロー
 
 **使用方法**:
 ```
@@ -64,6 +66,7 @@ Me: インジェクション脆弱性をスキャンしてください
 - jQuery `.html()`
 - Vue `v-html`
 - `eval()` / `new Function()`
+- 動的な`innerHTML`代入。静的なリテラルHTMLはfalse positive削減のため報告しません。
 
 **使用方法**:
 ```

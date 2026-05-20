@@ -6,6 +6,15 @@ sidebar_position: 1
 
 AI가 생성한 코드의 보안 취약점을 자동으로 탐지합니다.
 
+## 1.2.0 AST 기반 탐지
+
+JavaScript / TypeScript의 injection, XSS, crypto, auth, path 스캐너는 AST를 파싱해 regex만으로 놓치던 흐름을 추적합니다.
+
+- 함수 파라미터 taint와 다단계 변수 체인을 탐지합니다.
+- `innerHTML`에 리터럴 HTML 문자열을 넣는 경우는 XSS로 보고하지 않고, 동적 값만 보고합니다.
+- `res.setHeader('Access-Control-Allow-Origin', '*')` 형태의 CORS 와일드카드를 탐지합니다.
+- Python / Java / Go와 JS/TS 파싱 실패 코드는 기존 regex 경로를 사용합니다.
+
 ## 지원하는 취약점 유형
 
 ### 1. 비밀 정보 탐지
@@ -39,6 +48,12 @@ SQL, NoSQL, 커맨드 인젝션 공격을 탐지합니다.
 const query = `SELECT * FROM users WHERE id = ${userId}`;
 db.query(query);
 
+// ❌ 취약함: 함수 파라미터 taint
+function search(input) {
+  db.query(`SELECT * FROM users WHERE name = ${input}`);
+}
+search(req.body.name);
+
 // ✅ 안전함
 const query = 'SELECT * FROM users WHERE id = ?';
 db.query(query, [userId]);
@@ -62,6 +77,9 @@ DOM 기반 및 반사 XSS 취약점을 탐지합니다.
 element.innerHTML = userInput;
 document.write(data);
 eval(code);
+
+// ✅ 1.2.0에서는 정적 리터럴 HTML은 보고하지 않음
+element.innerHTML = '<strong>Saved</strong>';
 
 // ✅ 안전함
 element.textContent = userInput;

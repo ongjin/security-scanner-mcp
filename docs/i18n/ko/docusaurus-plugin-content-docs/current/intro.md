@@ -34,6 +34,8 @@ AI 코드 생성 도구는 강력하지만, 종종 보안 취약점이 있는 �
 - 파일 및 경로 취약점
 - 취약한 종속성
 
+1.2.0부터 JavaScript / TypeScript의 injection, XSS, crypto, auth, path 스캐너는 AST 기반 탐지를 사용합니다. 함수 파라미터 taint와 다단계 변수 흐름을 추적하며, Python / Java / Go와 JS/TS 파싱 실패 코드는 기존 regex 경로를 계속 사용합니다.
+
 ### IaC(Infrastructure as Code) 스캔
 
 - **Dockerfile**: CIS Docker 벤치마크 기반 15개 이상 규칙
@@ -55,10 +57,16 @@ const apiKey = "AIzaSyC1234567890abcdef";
 const query = `SELECT * FROM users WHERE id = ${userId}`;
 element.innerHTML = userInput;
 
+function findUser(input) {
+  db.query(`SELECT * FROM users WHERE id = ${input}`);
+}
+findUser(req.body.userId);
+
 // Claude가 탐지:
 // 🔴 위험: Google API 키 하드코딩
 // 🟠 높음: 템플릿 리터럴을 통한 SQL 인젝션
 // 🟠 높음: innerHTML 할당을 통한 XSS
+// 🟠 높음: 함수 파라미터 taint가 SQL sink로 전달됨
 ```
 
 ## 다음 단계

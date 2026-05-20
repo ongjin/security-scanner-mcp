@@ -6,6 +6,17 @@ sidebar_position: 1
 
 Complete reference of all vulnerability types detected by Security Scanner MCP.
 
+## Detection Semantics in 1.2.0
+
+JavaScript and TypeScript scanner paths are AST-aware for injection, XSS, crypto, auth, and path findings. The AST path detects:
+
+- Function-parameter taint into SQL, MongoDB, command, and file-system sinks.
+- Multi-hop variable chains such as `req.body.file` → `f` → `normalized` → `fs.readFile`.
+- CORS wildcard headers set through `res.setHeader('Access-Control-Allow-Origin', '*')`.
+- Multi-hop tainted password storage.
+
+The XSS scanner no longer reports static literal HTML assigned to `innerHTML`, but it still reports dynamic values. Python, Java, Go, and JS/TS parse failures continue to use regex-based detection.
+
 ## OWASP Top 10:2021 Mapping
 
 ### A01:2021 - Broken Access Control
@@ -53,6 +64,12 @@ const key = "hardcoded_key_123";
 ```javascript
 // SQL Injection
 const query = `SELECT * FROM users WHERE id = ${userId}`;
+
+// Function-parameter taint
+function findUser(input) {
+  db.query(`SELECT * FROM users WHERE id = ${input}`);
+}
+findUser(req.body.userId);
 
 // Command Injection
 exec(`ping ${userInput}`);
@@ -171,6 +188,9 @@ child_process.execFile('git', ['clone', repo_url]);
 // Vulnerable
 element.innerHTML = userInput;
 
+// Not reported as XSS: static literal HTML
+element.innerHTML = '<strong>Saved</strong>';
+
 // Secure
 element.textContent = userInput;
 ```
@@ -202,9 +222,11 @@ res.json({ error: 'Internal server error' });
 ```javascript
 // Vulnerable
 const password = "admin123";
+user.password = req.body.password;
 
 // Secure
 const password = process.env.DB_PASSWORD;
+user.password = await bcrypt.hash(req.body.password, 12);
 ```
 
 ### CWE-327: Broken Cryptography

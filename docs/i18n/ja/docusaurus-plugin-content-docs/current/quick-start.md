@@ -16,7 +16,14 @@ Me: このコードをセキュリティの問題についてスキャンして�
 const apiKey = "AIzaSyC1234567890abcdef";
 const query = `SELECT * FROM users WHERE id = ${userId}`;
 element.innerHTML = userInput;
+
+function findUser(input) {
+  db.query(`SELECT * FROM users WHERE id = ${input}`);
+}
+findUser(req.body.userId);
 ```
+
+1.2.0以降、JavaScript / TypeScriptはASTベース検出を使用するため、関数パラメータと複数段階の変数フローも検出されます。`el.innerHTML = '<div>safe</div>'`のようなリテラルHTMLだけの代入はXSSとして報告しません。
 
 Claudeは`scan-security`ツールを呼び出して、以下を表示します:
 

@@ -34,6 +34,8 @@ AI 代码生成工具功能强大，但经常生成存在安全漏洞的代码�
 - 文件和路径漏洞
 - 易受攻击的依赖项
 
+从 1.2.0 开始，JavaScript / TypeScript 的 injection、XSS、crypto、auth、path 扫描器使用 AST 感知检测。它会跟踪函数参数 taint 和多跳变量流；Python / Java / Go 以及 JS/TS 解析失败的代码仍使用原有 regex 路径。
+
 ### 基础设施即代码（IaC）扫描
 
 - **Dockerfile**：基于 CIS Docker 基准的 15+ 规则
@@ -55,10 +57,16 @@ const apiKey = "AIzaSyC1234567890abcdef";
 const query = `SELECT * FROM users WHERE id = ${userId}`;
 element.innerHTML = userInput;
 
+function findUser(input) {
+  db.query(`SELECT * FROM users WHERE id = ${input}`);
+}
+findUser(req.body.userId);
+
 // Claude 检测到：
 // 🔴 严重：Google API 密钥硬编码
 // 🟠 高：通过模板文字进行 SQL 注入
 // 🟠 高：通过 innerHTML 赋值导致 XSS
+// 🟠 高：函数参数 taint 到达 SQL sink
 ```
 
 ## 下一步

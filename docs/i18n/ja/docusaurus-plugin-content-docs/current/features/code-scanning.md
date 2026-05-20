@@ -13,6 +13,15 @@ Security Scanner MCPは複数のプログラミング言語を対象とした包
 - Java
 - Go
 
+## 1.2.0のASTベース検出
+
+JavaScript / TypeScriptでは、injection、XSS、crypto、auth、pathスキャナーがASTを解析して、regexだけでは見落としやすいデータフローを追跡します。
+
+- 関数パラメータtaintと複数段階の変数チェーンを検出します。
+- `innerHTML`への静的なリテラルHTMLはXSSとして報告せず、動的な値だけを報告します。
+- `res.setHeader('Access-Control-Allow-Origin', '*')`形式のCORSワイルドカードを検出します。
+- Python / Java / GoとJS/TSのパース失敗時は従来のregexパスを使用します。
+
 ## 脆弱性カテゴリ
 
 ### 🔑 ハードコードされたシークレット
@@ -49,6 +58,12 @@ const awsKey = process.env.AWS_ACCESS_KEY_ID;
 // ❌ 脆弱 - 文字列連結
 const query = "SELECT * FROM users WHERE id = " + userId;
 const query = `SELECT * FROM users WHERE id = ${userId}`;
+
+// ❌ 脆弱 - 関数パラメータtaint
+function search(input) {
+  db.query(`SELECT * FROM users WHERE name = ${input}`);
+}
+search(req.body.name);
 
 // ✅ 安全 - プリペアドステートメント
 const query = "SELECT * FROM users WHERE id = ?";

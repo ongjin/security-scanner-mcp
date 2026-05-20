@@ -6,6 +6,16 @@ sidebar_position: 1
 
 Security Scanner MCPで検出されるすべての脆弱性タイプの完全なリファレンス。
 
+## 1.2.0の検出セマンティクス
+
+JavaScript / TypeScriptのinjection、XSS、crypto、auth、path検出はASTベースです。
+
+- 関数パラメータtaintがSQL、MongoDB、command、file-system sinkに到達するフローを検出します。
+- `req.body.file` → `f` → `normalized` → `fs.readFile`のような複数段階の変数フローを検出します。
+- `res.setHeader('Access-Control-Allow-Origin', '*')`のCORSワイルドカードを検出します。
+- 複数段階taintによる平文パスワード保存を検出します。
+- `innerHTML`の静的なリテラルHTMLはXSSとして報告せず、動的な値だけを報告します。
+
 ## OWASP Top 10:2021マッピング
 
 ### A01:2021 - Broken Access Control

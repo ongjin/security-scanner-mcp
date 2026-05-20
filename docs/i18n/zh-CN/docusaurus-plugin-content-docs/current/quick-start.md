@@ -16,7 +16,14 @@ sidebar_position: 3
 const apiKey = "AIzaSyC1234567890abcdef";
 const query = `SELECT * FROM users WHERE id = ${userId}`;
 element.innerHTML = userInput;
+
+function findUser(input) {
+  db.query(`SELECT * FROM users WHERE id = ${input}`);
+}
+findUser(req.body.userId);
 ```
+
+从 1.2.0 开始，JavaScript / TypeScript 使用 AST 感知检测，因此函数参数和多跳变量流也会被检测到。`el.innerHTML = '<div>safe</div>'` 这样的字面量 HTML 赋值不会作为 XSS 报告。
 
 Claude 将调用 `scan-security` 并显示：
 

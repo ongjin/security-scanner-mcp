@@ -42,6 +42,16 @@ AI가 생성한 코드에는 보안 취약점이 **322% 더 많다**는 연구 �
 | `scan-path` | 파일/경로 취약점 (Path Traversal, 업로드 등) |
 | `scan-dependencies` | package.json 등에서 취약한 의존성 검사 |
 
+#### 1.2.0 AST 기반 JS/TS 탐지
+
+JavaScript/TypeScript 스캐너는 이제 AST를 파싱해 단순 문자열 패턴으로 놓치던 흐름을 추적합니다.
+
+- 함수 파라미터 taint: `h(req.body.x)`가 `function h(input) { db.query(input); }` 안의 sink까지 이어지면 탐지합니다.
+- 다단계 변수 흐름: `req.body` → `a` → `b` → sink 형태를 탐지합니다.
+- `innerHTML`은 동적 값 할당만 보고하고, 리터럴 HTML 문자열은 false positive로 보고하지 않습니다.
+- `res.setHeader('Access-Control-Allow-Origin', '*')` 형태의 CORS 와일드카드도 탐지합니다.
+- Python / Java / Go 및 JS/TS parse 실패 파일은 기존 regex 경로를 계속 사용합니다.
+
 ### 🏗️ Infrastructure as Code (IaC) 스캔
 | Tool | 설명 |
 |------|------|
@@ -241,14 +251,14 @@ Claude: [scan-in-sandbox 호출]
 - Stripe / Twilio API Key
 
 ### 💉 Injection
-- SQL Injection (문자열 연결, 템플릿 리터럴)
-- NoSQL Injection (MongoDB)
-- Command Injection (exec, spawn)
+- SQL Injection (문자열 연결, 템플릿 리터럴, 함수 파라미터 흐름)
+- NoSQL Injection (MongoDB, tainted query object)
+- Command Injection (exec, spawn, execSync)
 - LDAP Injection
 
 ### 🌐 XSS
 - dangerouslySetInnerHTML (React)
-- innerHTML / outerHTML
+- innerHTML / outerHTML (동적 값 탐지, 리터럴 HTML은 제외)
 - jQuery .html() / Vue v-html
 - eval() / new Function()
 - document.write()
@@ -256,6 +266,7 @@ Claude: [scan-in-sandbox 호출]
 ### 🔐 암호화
 - 약한 해시 (MD5, SHA1)
 - 안전하지 않은 랜덤 (Math.random)
+- 다단계 taint가 들어간 평문 비밀번호 저장
 - 하드코딩된 암호화 키/IV
 - SSL 인증서 검증 비활성화
 - 취약한 TLS 버전 (1.0, 1.1)
@@ -263,11 +274,11 @@ Claude: [scan-in-sandbox 호출]
 ### 🔒 인증/세션
 - JWT 설정 오류 (none 알고리즘, 만료 없음)
 - 안전하지 않은 쿠키 설정
-- CORS 와일드카드
+- CORS 와일드카드 (`setHeader` / `header` 포함)
 - 약한 비밀번호 정책
 
 ### 📁 파일/경로
-- Path Traversal
+- Path Traversal (다단계 변수/함수 파라미터 흐름 포함)
 - 위험한 파일 삭제
 - 안전하지 않은 파일 업로드
 - Zip Slip (Java)

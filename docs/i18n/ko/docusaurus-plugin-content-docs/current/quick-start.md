@@ -30,10 +30,21 @@ const password = "admin123";
 const query = `SELECT * FROM users WHERE id = ${userId}`;
 ```
 
-Claude가 자동으로 `scan-code` MCP 도구를 호출하고 다음을 보고합니다:
+Claude가 자동으로 `scan-security` MCP 도구를 호출하고 다음을 보고합니다:
 - 🔴 **위험**: Google API 키 하드코딩
 - 🔴 **위험**: 비밀번호 하드코딩
 - 🟠 **높음**: SQL 인젝션 취약점
+
+### 1.2.0 AST 기반 탐지 예시
+
+```javascript
+function findUser(input) {
+  db.query(`SELECT * FROM users WHERE id = ${input}`);
+}
+findUser(req.body.userId);
+```
+
+JavaScript / TypeScript는 AST 기반 탐지를 사용하므로 함수 파라미터와 다단계 변수 흐름도 탐지됩니다. `el.innerHTML = '<div>safe</div>'`처럼 리터럴 HTML만 넣는 코드는 XSS로 보고하지 않습니다.
 
 ### CLI 사용
 

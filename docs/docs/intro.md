@@ -34,6 +34,8 @@ AI code generation tools are powerful, but they often produce code with security
 - File and path vulnerabilities
 - Vulnerable dependencies
 
+Since 1.2.0, JavaScript and TypeScript source scanners use AST-aware detection for injection, XSS, crypto, auth, and path checks. They follow function-parameter taint and multi-hop variable chains, while Python / Java / Go and JS/TS parse failures continue through the regex path.
+
 ### Infrastructure as Code (IaC) Scanning
 
 - **Dockerfile**: 15+ rules based on CIS Docker Benchmark
@@ -55,10 +57,16 @@ const apiKey = "AIzaSyC1234567890abcdef";
 const query = `SELECT * FROM users WHERE id = ${userId}`;
 element.innerHTML = userInput;
 
+function findUser(input) {
+  db.query(`SELECT * FROM users WHERE id = ${input}`);
+}
+findUser(req.body.userId);
+
 // Claude detects:
 // 🔴 Critical: Google API Key hardcoded
 // 🟠 High: SQL Injection via template literal
 // 🟠 High: XSS via innerHTML assignment
+// 🟠 High: Function-parameter taint into SQL sink
 ```
 
 ## Next Steps

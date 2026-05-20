@@ -6,6 +6,16 @@ sidebar_position: 1
 
 Security Scanner MCP가 탐지하는 모든 취약점 유형에 대한 완전한 참조.
 
+## 1.2.0 탐지 의미
+
+JavaScript / TypeScript의 injection, XSS, crypto, auth, path 탐지는 AST 기반입니다.
+
+- 함수 파라미터 taint가 SQL, MongoDB, command, file-system sink로 들어가는 흐름을 탐지합니다.
+- `req.body.file` → `f` → `normalized` → `fs.readFile` 같은 다단계 변수 흐름을 탐지합니다.
+- `res.setHeader('Access-Control-Allow-Origin', '*')` CORS 와일드카드를 탐지합니다.
+- 다단계 taint가 들어간 평문 비밀번호 저장을 탐지합니다.
+- `innerHTML`의 정적 리터럴 HTML은 XSS로 보고하지 않고, 동적 값만 보고합니다.
+
 ## OWASP Top 10:2021 매핑
 
 ### A01:2021 - 손상된 접근 제어

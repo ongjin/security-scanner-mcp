@@ -42,6 +42,16 @@ This MCP server goes beyond simple scanning:
 | `scan-path` | Find file/path vulnerabilities (Path Traversal, uploads, etc.) |
 | `scan-dependencies` | Check for vulnerable dependencies in package.json |
 
+#### 1.2.0 AST-aware JS/TS detection
+
+JavaScript and TypeScript scanners now parse ASTs so they can follow data flow that regex-only scanning missed.
+
+- Function-parameter taint: `h(req.body.x)` is detected when `function h(input) { db.query(input); }` sends that parameter to a sink.
+- Multi-hop variables: `req.body` → `a` → `b` → sink flows are detected.
+- `innerHTML` reports dynamic assignments, while literal HTML strings are no longer reported as XSS findings.
+- `res.setHeader('Access-Control-Allow-Origin', '*')` CORS wildcards are detected.
+- Python / Java / Go inputs, and JS/TS files that fail to parse, continue through the existing regex path.
+
 ### 🏗️ Infrastructure as Code (IaC) Scanning
 | Tool | Description |
 |------|-------------|
@@ -241,14 +251,14 @@ Claude: [calls scan-in-sandbox]
 - Stripe / Twilio API Keys
 
 ### 💉 Injection Attacks
-- SQL Injection (string concatenation, template literals)
-- NoSQL Injection (MongoDB)
-- Command Injection (exec, spawn)
+- SQL Injection (string concatenation, template literals, function-parameter flow)
+- NoSQL Injection (MongoDB, tainted query objects)
+- Command Injection (exec, spawn, execSync)
 - LDAP Injection
 
 ### 🌐 Cross-Site Scripting (XSS)
 - dangerouslySetInnerHTML (React)
-- innerHTML / outerHTML
+- innerHTML / outerHTML (dynamic assignments detected, literal HTML excluded)
 - jQuery .html() / Vue v-html
 - eval() / new Function()
 - document.write()
@@ -256,6 +266,7 @@ Claude: [calls scan-in-sandbox]
 ### 🔐 Cryptographic Issues
 - Weak hashing (MD5, SHA1)
 - Insecure random (Math.random)
+- Plain password storage through multi-hop taint
 - Hardcoded encryption keys/IVs
 - SSL certificate validation disabled
 - Vulnerable TLS versions (1.0, 1.1)
@@ -263,11 +274,11 @@ Claude: [calls scan-in-sandbox]
 ### 🔒 Authentication & Sessions
 - JWT misconfigurations (none algorithm, no expiration)
 - Insecure cookie settings
-- CORS wildcards
+- CORS wildcards, including `setHeader` / `header`
 - Weak password policies
 
 ### 📁 File & Path Issues
-- Path Traversal
+- Path Traversal, including multi-hop variable and function-parameter flow
 - Dangerous file deletions
 - Insecure file uploads
 - Zip Slip (Java)

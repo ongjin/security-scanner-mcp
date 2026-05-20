@@ -6,6 +6,16 @@ sidebar_position: 1
 
 Security Scanner MCP 检测的所有漏洞类型的完整参考。
 
+## 1.2.0 检测语义
+
+JavaScript / TypeScript 的 injection、XSS、crypto、auth、path 检测是 AST 感知的。
+
+- 检测函数参数 taint 到 SQL、MongoDB、command、file-system sink 的流。
+- 检测 `req.body.file` → `f` → `normalized` → `fs.readFile` 这样的多跳变量流。
+- 检测 `res.setHeader('Access-Control-Allow-Origin', '*')` CORS 通配符。
+- 检测多跳 taint 导致的明文密码存储。
+- `innerHTML` 的静态字面量 HTML 不作为 XSS 报告，只报告动态值。
+
 ## OWASP Top 10:2021 映射
 
 ### A01:2021 - 破损访问控制

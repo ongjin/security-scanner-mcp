@@ -13,6 +13,15 @@ Security Scanner MCP 为多种编程语言提供综合的代码安全扫描。
 - Java
 - Go
 
+## 1.2.0 AST 感知检测
+
+对于 JavaScript / TypeScript，injection、XSS、crypto、auth、path 扫描器会解析 AST，以跟踪仅靠 regex 容易漏掉的数据流。
+
+- 检测函数参数 taint 和多跳变量链。
+- `innerHTML` 的静态字面量 HTML 不再作为 XSS 报告，只报告动态赋值。
+- 检测 `res.setHeader('Access-Control-Allow-Origin', '*')` 形式的 CORS 通配符。
+- Python / Java / Go 以及 JS/TS 解析失败时仍使用原有 regex 路径。
+
 ## 漏洞分类
 
 ### 🔑 硬编码密钥
@@ -49,6 +58,12 @@ const awsKey = process.env.AWS_ACCESS_KEY_ID;
 // ❌ 易受攻击 - 字符串拼接
 const query = "SELECT * FROM users WHERE id = " + userId;
 const query = `SELECT * FROM users WHERE id = ${userId}`;
+
+// ❌ 易受攻击 - 函数参数 taint
+function search(input) {
+  db.query(`SELECT * FROM users WHERE name = ${input}`);
+}
+search(req.body.name);
 
 // ✅ 安全 - 预处理语句
 const query = "SELECT * FROM users WHERE id = ?";

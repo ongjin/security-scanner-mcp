@@ -22,6 +22,7 @@ Me: Scan this code for security issues
 - Runs all 7 scanners simultaneously
 - Combines results
 - Returns comprehensive report
+- Uses AST-aware JS/TS detection for injection, XSS, crypto, auth, and path scanners
 
 ### scan-secrets
 
@@ -48,6 +49,7 @@ Me: Check for hardcoded secrets in this code
 - NoSQL injection (MongoDB)
 - Command injection (exec, spawn, system)
 - LDAP injection
+- Function-parameter and multi-hop taint flow in JavaScript / TypeScript
 
 **Usage**:
 ```
@@ -64,6 +66,7 @@ Me: Scan for injection vulnerabilities
 - jQuery `.html()`
 - Vue `v-html`
 - `eval()` / `new Function()`
+- Dynamic `innerHTML` assignments; literal HTML strings are ignored to reduce false positives
 
 **Usage**:
 ```
@@ -77,6 +80,7 @@ Me: Check for XSS vulnerabilities
 **Detects**:
 - Weak hashing (MD5, SHA1)
 - Insecure random (`Math.random`)
+- Plain password storage through multi-hop taint in JavaScript / TypeScript
 - Hardcoded keys/IVs
 - SSL validation disabled
 - Vulnerable TLS versions
@@ -93,7 +97,7 @@ Me: Analyze cryptographic security
 **Detects**:
 - JWT misconfigurations
 - Insecure cookies
-- CORS wildcards
+- CORS wildcards, including `setHeader` / `header`
 - Weak password policies
 - Session fixation risks
 
@@ -108,6 +112,7 @@ Me: Review authentication security
 
 **Detects**:
 - Path traversal
+- Multi-hop file path flow into `fs.readFile` / `writeFile`
 - Dangerous file operations
 - Insecure file uploads
 - Zip Slip (Java)

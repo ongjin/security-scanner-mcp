@@ -22,6 +22,7 @@ Security Scanner MCP 所有工具的完整参考。
 - 同时运行所有 7 个扫描工具
 - 合并结果
 - 返回综合报告
+- 对 JavaScript / TypeScript 使用 AST 感知检测，跟踪函数参数 taint 和多跳变量流
 
 ### scan-secrets
 
@@ -48,6 +49,7 @@ Security Scanner MCP 所有工具的完整参考。
 - NoSQL 注入（MongoDB）
 - 命令注入（exec、spawn、system）
 - LDAP 注入
+- JavaScript / TypeScript 中的函数参数和多跳 taint 流
 
 **用法**：
 ```
@@ -64,6 +66,7 @@ Security Scanner MCP 所有工具的完整参考。
 - jQuery `.html()`
 - Vue `v-html`
 - `eval()` / `new Function()`
+- 动态 `innerHTML` 赋值；静态字面量 HTML 会被忽略以减少误报
 
 **用法**：
 ```

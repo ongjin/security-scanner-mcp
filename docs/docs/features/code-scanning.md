@@ -13,6 +13,30 @@ Security Scanner MCP provides comprehensive code security scanning for multiple 
 - Java
 - Go
 
+## AST-Aware Detection in 1.2.0
+
+For JavaScript and TypeScript, the injection, XSS, crypto, auth, and path scanners parse code into an AST before matching security sinks. This improves correctness over regex-only scanning:
+
+- Function-parameter taint is detected.
+- Multi-hop variable chains are detected.
+- `innerHTML` literal HTML strings are ignored, while dynamic assignments are still reported.
+- `res.setHeader('Access-Control-Allow-Origin', '*')` and `res.header(...)` CORS wildcards are reported.
+- Python / Java / Go and JS/TS parse failures still use the regex path.
+
+```typescript
+function readUser(input) {
+  db.query(`SELECT * FROM users WHERE id = ${input}`);
+}
+
+const file = req.body.file;
+const normalized = file;
+fs.readFile(normalized, cb);
+
+readUser(req.body.userId);
+```
+
+Both the function-parameter SQL flow and the multi-hop file path flow are reported.
+
 ## Vulnerability Categories
 
 ### 🔑 Hardcoded Secrets
@@ -74,6 +98,15 @@ exec(`ping ${userInput}`);
 execFile('ping', [userInput]);
 ```
 
+**Function parameter taint:**
+```javascript
+// ❌ Vulnerable
+function search(input) {
+  db.query(`SELECT * FROM users WHERE name = ${input}`);
+}
+search(req.body.name);
+```
+
 ### 🌐 Cross-Site Scripting (XSS)
 
 **Detected patterns:**
@@ -90,6 +123,9 @@ execFile('ping', [userInput]);
 // ❌ Vulnerable
 element.innerHTML = userInput;
 element.dangerouslySetInnerHTML = { __html: userInput };
+
+// ✅ Not reported as XSS in 1.2.0: static literal HTML
+element.innerHTML = '<strong>Saved</strong>';
 
 // ✅ Secure
 element.textContent = userInput;
@@ -134,6 +170,7 @@ const random = crypto.randomBytes(32);
 **CORS Issues:**
 - Wildcard origins in production
 - Credentials with wildcard
+- Wildcards set via `res.setHeader('Access-Control-Allow-Origin', '*')`
 
 **Example:**
 
@@ -160,6 +197,11 @@ app.use(cors({
 ```javascript
 // ❌ Vulnerable
 const file = fs.readFileSync(req.query.path);
+
+// ❌ Vulnerable in 1.2.0: multi-hop variable flow
+const requested = req.body.file;
+const normalized = requested;
+fs.readFile(normalized, cb);
 
 // ✅ Secure
 const safePath = path.join(SAFE_DIR, path.basename(req.query.path));
