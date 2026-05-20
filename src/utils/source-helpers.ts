@@ -140,3 +140,60 @@ function shannonEntropy(s: string): number {
   }
   return h;
 }
+
+export function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+const TAINT_PATTERNS: Partial<Record<Language, RegExp[]>> = {
+  javascript: [
+    /(?:const|let|var)\s+(\w+)\s*=\s*(?:req|request|ctx\.request|event)\.(?:body|query|params|cookies|headers|url|args)\b/g,
+    /(?:const|let|var)\s+(\w+)\s*=\s*process\.argv\b/g,
+  ],
+  typescript: [
+    /(?:const|let|var)\s+(\w+)\s*=\s*(?:req|request|ctx\.request|event)\.(?:body|query|params|cookies|headers|url|args)\b/g,
+    /(?:const|let|var)\s+(\w+)\s*=\s*process\.argv\b/g,
+  ],
+  python: [
+    /(\w+)\s*=\s*request\.(?:form|args|json|values|files|data)\b/g,
+    /(\w+)\s*=\s*flask\.request\.\w+/g,
+    /(\w+)\s*=\s*sys\.argv\b/g,
+  ],
+  java: [
+    /(?:String|Object|int|long|var)\s+(\w+)\s*=\s*\w+\.getParameter\s*\(/g,
+  ],
+  go: [
+    /(\w+)\s*(?::=|=)\s*r\.(?:URL\.Query|FormValue|PostForm|PostFormValue)\(/g,
+  ],
+};
+
+const MAX_TAINTED_VARS = 50;
+
+/**
+ * Pass 1 of the taint-flow detection. Returns the set of variable names
+ * assigned directly from a user-input source. Returns empty set if the
+ * count exceeds MAX_TAINTED_VARS (50).
+ */
+export function collectTaintedVars(code: string, language: Language): Set<string> {
+  const patterns = TAINT_PATTERNS[language];
+  if (!patterns) return new Set();
+  const result = new Set<string>();
+  for (const pattern of patterns) {
+    pattern.lastIndex = 0;
+    let m: RegExpExecArray | null;
+    while ((m = pattern.exec(code)) !== null) {
+      if (m[1]) result.add(m[1]);
+      if (result.size > MAX_TAINTED_VARS) return new Set();
+    }
+  }
+  return result;
+}
+
+/**
+ * Build a regex source fragment matching any tainted identifier as a
+ * whole word. Empty set yields empty string for safe concatenation.
+ */
+export function taintAlternation(tainted: Set<string>): string {
+  if (tainted.size === 0) return '';
+  return '|' + [...tainted].map(v => `\\b${escapeRegex(v)}\\b`).join('|');
+}

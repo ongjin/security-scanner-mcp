@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { lineOf, isCommentLine, isInBlockComment, stripInlineComments, isPlaceholderValue } from '../source-helpers.js';
+import { lineOf, isCommentLine, isInBlockComment, stripInlineComments, isPlaceholderValue, escapeRegex, collectTaintedVars, taintAlternation } from '../source-helpers.js';
 
 test('lineOf: index 0 returns line 1', () => {
   assert.equal(lineOf('abc', 0), 1);
@@ -158,4 +158,84 @@ test('isPlaceholderValue: short random-looking strings are not placeholders', ()
 
 test('isPlaceholderValue: empty string is not a placeholder', () => {
   assert.equal(isPlaceholderValue(''), false);
+});
+
+test('escapeRegex: regex metacharacters are escaped', () => {
+  assert.equal(escapeRegex('a.b*c'), 'a\\.b\\*c');
+  assert.equal(escapeRegex('('), '\\(');
+});
+
+test('escapeRegex: plain identifier is unchanged', () => {
+  assert.equal(escapeRegex('userId'), 'userId');
+});
+
+test('collectTaintedVars: JS — req.body.* assignment', () => {
+  const code = 'const id = req.body.id;';
+  const tainted = collectTaintedVars(code, 'javascript');
+  assert.ok(tainted.has('id'));
+});
+
+test('collectTaintedVars: JS — multiple sources', () => {
+  const code = `
+    const id = req.body.id;
+    let cmd = req.query.cmd;
+    var p = req.params.p;
+  `;
+  const tainted = collectTaintedVars(code, 'javascript');
+  assert.ok(tainted.has('id'));
+  assert.ok(tainted.has('cmd'));
+  assert.ok(tainted.has('p'));
+});
+
+test('collectTaintedVars: JS — process.env is NOT a taint source', () => {
+  const code = 'const secret = process.env.SECRET;';
+  const tainted = collectTaintedVars(code, 'javascript');
+  assert.equal(tainted.has('secret'), false);
+});
+
+test('collectTaintedVars: JS — function parameters are NOT collected', () => {
+  const code = 'function handler(req, body) { doSomething(body); }';
+  const tainted = collectTaintedVars(code, 'javascript');
+  assert.equal(tainted.size, 0);
+});
+
+test('collectTaintedVars: Python — request.form', () => {
+  const code = 'name = request.form["name"]';
+  const tainted = collectTaintedVars(code, 'python');
+  assert.ok(tainted.has('name'));
+});
+
+test('collectTaintedVars: Java — request.getParameter', () => {
+  const code = 'String userId = request.getParameter("id");';
+  const tainted = collectTaintedVars(code, 'java');
+  assert.ok(tainted.has('userId'));
+});
+
+test('collectTaintedVars: Go — r.URL.Query()', () => {
+  const code = 'q := r.URL.Query()';
+  const tainted = collectTaintedVars(code, 'go');
+  assert.ok(tainted.has('q'));
+});
+
+test('collectTaintedVars: cap at 50 — returns empty set when exceeded', () => {
+  const lines = [];
+  for (let i = 0; i < 60; i++) lines.push(`const v${i} = req.body.x${i};`);
+  const tainted = collectTaintedVars(lines.join('\n'), 'javascript');
+  assert.equal(tainted.size, 0, 'expected empty set when > 50 tainted vars');
+});
+
+test('collectTaintedVars: unknown language returns empty set', () => {
+  const tainted = collectTaintedVars('any code', 'ruby' as any);
+  assert.equal(tainted.size, 0);
+});
+
+test('taintAlternation: empty set yields empty string', () => {
+  assert.equal(taintAlternation(new Set()), '');
+});
+
+test('taintAlternation: builds word-bounded alternation with leading pipe', () => {
+  assert.equal(
+    taintAlternation(new Set(['userId', 'cmd'])),
+    '|\\buserId\\b|\\bcmd\\b'
+  );
 });
