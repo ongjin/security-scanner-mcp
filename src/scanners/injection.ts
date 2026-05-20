@@ -4,14 +4,29 @@
  * Pass 2 (extending sink alternations in select patterns).
  */
 
-import { SecurityIssue } from '../types.js';
+import * as t from '@babel/types';
+import type { SecurityIssue } from '../types.js';
+import {
+  parseCode,
+  walk,
+  analyzeTaint,
+  isTainted,
+  matchSink,
+  SQL_SINKS,
+  COMMAND_SINKS,
+  MONGO_SINKS,
+  toIssue,
+  type ParseResult,
+  type SinkDefinition,
+  type SinkMatchResult,
+} from '../utils/ast/index.js';
 import {
   lineOf,
   isCommentLine,
   isInBlockComment,
   collectTaintedVars,
   taintAlternation,
-  Language,
+  type Language,
 } from '../utils/source-helpers.js';
 
 interface StaticPattern {
@@ -116,8 +131,91 @@ const TAINT_AWARE_PATTERNS: TaintAwarePattern[] = [
   },
 ];
 
+const BARE_SQL_SINKS = new Set(['query', 'execute', 'sql', 'raw']);
+const BARE_MONGO_SINKS = new Set(['find', 'findOne', 'updateOne', 'deleteOne', 'updateMany', 'deleteMany']);
+
 export function scanInjection(code: string, language: string): SecurityIssue[] {
   const lang = language as Language;
+  if (lang === 'javascript' || lang === 'typescript') {
+    const parsed = parseCode(code, lang);
+    if (parsed) {
+      return scanInjectionAST(code, parsed);
+    }
+  }
+  return scanInjectionRegex(code, lang);
+}
+
+function scanInjectionAST(code: string, parsed: ParseResult): SecurityIssue[] {
+  const taint = analyzeTaint(parsed);
+  const issues: SecurityIssue[] = [];
+  const sinks = [...SQL_SINKS, ...COMMAND_SINKS, ...MONGO_SINKS];
+
+  walk(parsed.file, (node) => {
+    if (!t.isCallExpression(node)) return;
+
+    for (const def of sinks) {
+      const m = matchInjectionSink(node, def);
+      if (!m.match) continue;
+
+      const arg = node.arguments[m.argIndex];
+      if (arg && isTainted(arg as t.Node, taint)) {
+        issues.push(toIssue(node, def, code));
+        return;
+      }
+    }
+
+    const calleeName = resolveCalleeName(node);
+    if (!calleeName) return;
+
+    const summary = taint.functionSummaries.get(calleeName);
+    if (!summary) return;
+
+    for (let i = 0; i < node.arguments.length; i++) {
+      const paramName = summary.paramOrder[i];
+      if (!paramName) continue;
+
+      const flows = summary.paramFlows.get(paramName) ?? [];
+      if (flows.length === 0) continue;
+
+      if (isTainted(node.arguments[i] as t.Node, taint)) {
+        const flowKinds = new Set(flows.map((f) => f.sinkKind));
+        const def = sinks.find((d) => flowKinds.has(d.kind));
+        if (def) {
+          issues.push(toIssue(node, def, code));
+          return;
+        }
+      }
+    }
+  });
+
+  return issues;
+}
+
+function matchInjectionSink(call: t.CallExpression, def: SinkDefinition): SinkMatchResult {
+  const base = matchSink(call, def);
+  if (base.match) return base;
+  if (!t.isIdentifier(call.callee)) return base;
+
+  if (def.kind === 'sql' && BARE_SQL_SINKS.has(call.callee.name)) {
+    return { match: true, argIndex: def.argIndex };
+  }
+
+  if (def.kind === 'mongo' && BARE_MONGO_SINKS.has(call.callee.name)) {
+    return { match: true, argIndex: def.argIndex };
+  }
+
+  return base;
+}
+
+function resolveCalleeName(call: t.CallExpression): string | null {
+  if (t.isIdentifier(call.callee)) return call.callee.name;
+  if (t.isMemberExpression(call.callee) && t.isIdentifier(call.callee.property)) {
+    return call.callee.property.name;
+  }
+  return null;
+}
+
+function scanInjectionRegex(code: string, lang: Language): SecurityIssue[] {
   const issues: SecurityIssue[] = [];
   const lines = code.split('\n');
   const tainted = collectTaintedVars(code, lang);

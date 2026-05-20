@@ -8,6 +8,8 @@ import {
   MONGO_SINKS,
   SQL_SINKS,
   matchSink,
+  type SinkDefinition,
+  type SinkMatchResult,
 } from './sinks.js';
 
 export type SinkKind = 'sql' | 'command' | 'innerHTML' | 'fs' | 'mongo';
@@ -92,8 +94,29 @@ function isTaintedExpression(node: t.Node, state: TaintState): boolean {
     return isTaintedExpression(node.object, state);
   }
 
-  if (t.isCallExpression(node)) {
-    return node.arguments.some((a) => isTaintedExpression(a as t.Node, state));
+  if (t.isObjectExpression(node)) {
+    return node.properties.some((property) => {
+      if (t.isObjectProperty(property)) {
+        return isTaintedExpression(property.value, state);
+      }
+      if (t.isSpreadElement(property)) {
+        return isTaintedExpression(property.argument, state);
+      }
+      return false;
+    });
+  }
+
+  if (t.isArrayExpression(node)) {
+    return node.elements.some((element) => element && isTaintedExpression(element, state));
+  }
+
+  if (
+    t.isParenthesizedExpression(node) ||
+    t.isTSAsExpression(node) ||
+    t.isTSTypeAssertion(node) ||
+    t.isTSNonNullExpression(node)
+  ) {
+    return isTaintedExpression(node.expression, state);
   }
 
   return false;
@@ -110,7 +133,9 @@ function isInsideFunctionBody(ancestors: t.Node[]): boolean {
   );
 }
 
-const CALL_SINKS = [...SQL_SINKS, ...COMMAND_SINKS, ...MONGO_SINKS, ...FS_SINKS];
+const BARE_SQL_SINKS = new Set(['query', 'execute', 'sql', 'raw']);
+const BARE_MONGO_SINKS = new Set(['find', 'findOne', 'updateOne', 'deleteOne', 'updateMany', 'deleteMany']);
+const CALL_SINKS: SinkDefinition[] = [...SQL_SINKS, ...COMMAND_SINKS, ...MONGO_SINKS, ...FS_SINKS];
 
 type SummarizableFunction =
   | t.FunctionDeclaration
@@ -173,7 +198,7 @@ function summarizeFunction(fn: SummarizableFunction): FunctionSummary {
     if (!t.isCallExpression(node)) return;
 
     for (const sink of CALL_SINKS) {
-      const result = matchSink(node, sink);
+      const result = matchSummarySink(node, sink);
       if (!result.match || result.argIndex < 0) continue;
 
       const arg = node.arguments[result.argIndex];
@@ -187,6 +212,22 @@ function summarizeFunction(fn: SummarizableFunction): FunctionSummary {
   });
 
   return { paramOrder, paramFlows };
+}
+
+function matchSummarySink(call: t.CallExpression, sink: SinkDefinition): SinkMatchResult {
+  const base = matchSink(call, sink);
+  if (base.match) return base;
+  if (!t.isIdentifier(call.callee)) return base;
+
+  if (sink.kind === 'sql' && BARE_SQL_SINKS.has(call.callee.name)) {
+    return { match: true, argIndex: 0 };
+  }
+
+  if (sink.kind === 'mongo' && BARE_MONGO_SINKS.has(call.callee.name)) {
+    return { match: true, argIndex: 0 };
+  }
+
+  return base;
 }
 
 function identifierParamNames(params: SummarizableFunction['params']): string[] {
