@@ -2,6 +2,13 @@ import * as t from '@babel/types';
 import type { ParseResult } from './parser.js';
 import { walk } from './traverse.js';
 import { isUserInputSource } from './sources.js';
+import {
+  COMMAND_SINKS,
+  FS_SINKS,
+  MONGO_SINKS,
+  SQL_SINKS,
+  matchSink,
+} from './sinks.js';
 
 export type SinkKind = 'sql' | 'command' | 'innerHTML' | 'fs' | 'mongo';
 
@@ -56,6 +63,7 @@ export function analyzeTaint(parsed: ParseResult): TaintState {
     });
   }
 
+  buildFunctionSummaries(parsed, state);
   return state;
 }
 
@@ -100,4 +108,212 @@ function isInsideFunctionBody(ancestors: t.Node[]): boolean {
       t.isObjectMethod(a) ||
       t.isClassMethod(a)
   );
+}
+
+const CALL_SINKS = [...SQL_SINKS, ...COMMAND_SINKS, ...MONGO_SINKS, ...FS_SINKS];
+
+type SummarizableFunction =
+  | t.FunctionDeclaration
+  | t.FunctionExpression
+  | t.ArrowFunctionExpression;
+
+type ColorMap = Map<string, Set<string>>;
+
+function buildFunctionSummaries(parsed: ParseResult, state: TaintState): void {
+  walk(parsed.file, (node) => {
+    if (t.isFunctionDeclaration(node) && node.id) {
+      state.functionSummaries.set(node.id.name, summarizeFunction(node));
+      return;
+    }
+
+    if (
+      t.isVariableDeclarator(node) &&
+      t.isIdentifier(node.id) &&
+      node.init &&
+      (t.isFunctionExpression(node.init) || t.isArrowFunctionExpression(node.init))
+    ) {
+      state.functionSummaries.set(node.id.name, summarizeFunction(node.init));
+    }
+  });
+}
+
+function summarizeFunction(fn: SummarizableFunction): FunctionSummary {
+  const paramOrder = identifierParamNames(fn.params);
+  const paramFlows: Map<string, SinkFlow[]> = new Map(
+    paramOrder.map((param) => [param, []])
+  );
+  const colors: ColorMap = new Map();
+
+  for (const param of paramOrder) {
+    addColors(colors, param, new Set([param]));
+  }
+
+  let changed = true;
+  while (changed) {
+    changed = false;
+    walkFunctionBody(fn, (node) => {
+      if (t.isVariableDeclarator(node) && t.isIdentifier(node.id) && node.init) {
+        const sourceColors = expressionColors(node.init, colors);
+        if (addColors(colors, node.id.name, sourceColors)) {
+          changed = true;
+        }
+        return;
+      }
+
+      if (t.isAssignmentExpression(node) && node.operator === '=' && t.isIdentifier(node.left)) {
+        const sourceColors = expressionColors(node.right, colors);
+        if (addColors(colors, node.left.name, sourceColors)) {
+          changed = true;
+        }
+      }
+    });
+  }
+
+  walkFunctionBody(fn, (node) => {
+    if (!t.isCallExpression(node)) return;
+
+    for (const sink of CALL_SINKS) {
+      const result = matchSink(node, sink);
+      if (!result.match || result.argIndex < 0) continue;
+
+      const arg = node.arguments[result.argIndex];
+      if (!arg) continue;
+
+      const reachingParams = expressionColors(arg as t.Node, colors);
+      for (const param of reachingParams) {
+        paramFlows.get(param)?.push({ sinkKind: sink.kind, callNode: node });
+      }
+    }
+  });
+
+  return { paramOrder, paramFlows };
+}
+
+function identifierParamNames(params: SummarizableFunction['params']): string[] {
+  return params.flatMap((param) => (t.isIdentifier(param) ? [param.name] : []));
+}
+
+function walkFunctionBody(
+  fn: SummarizableFunction,
+  visitor: (node: t.Node) => void
+): void {
+  walk(fn.body, (node) => {
+    if (isNestedFunction(node)) return false;
+    visitor(node);
+  });
+}
+
+function isNestedFunction(node: t.Node): boolean {
+  return (
+    t.isFunctionDeclaration(node) ||
+    t.isFunctionExpression(node) ||
+    t.isArrowFunctionExpression(node) ||
+    t.isObjectMethod(node) ||
+    t.isClassMethod(node)
+  );
+}
+
+function expressionColors(node: t.Node, colors: ColorMap): Set<string> {
+  if (t.isIdentifier(node)) {
+    return new Set(colors.get(node.name) ?? []);
+  }
+
+  if (t.isTemplateLiteral(node)) {
+    return unionColors(node.expressions.map((expr) => expressionColors(expr, colors)));
+  }
+
+  if (t.isBinaryExpression(node) || t.isLogicalExpression(node)) {
+    return unionColors([
+      expressionColors(node.left, colors),
+      expressionColors(node.right, colors),
+    ]);
+  }
+
+  if (t.isMemberExpression(node)) {
+    const parts = [expressionColors(node.object, colors)];
+    if (node.computed) {
+      parts.push(expressionColors(node.property, colors));
+    }
+    return unionColors(parts);
+  }
+
+  if (t.isCallExpression(node) || t.isNewExpression(node)) {
+    return new Set();
+  }
+
+  if (t.isObjectExpression(node)) {
+    return unionColors(
+      node.properties.map((property) => {
+        if (t.isObjectProperty(property)) {
+          return expressionColors(property.value, colors);
+        }
+        if (t.isSpreadElement(property)) {
+          return expressionColors(property.argument, colors);
+        }
+        return new Set<string>();
+      })
+    );
+  }
+
+  if (t.isArrayExpression(node)) {
+    return unionColors(
+      node.elements.map((element) => (element ? expressionColors(element, colors) : new Set()))
+    );
+  }
+
+  if (t.isConditionalExpression(node)) {
+    return unionColors([
+      expressionColors(node.consequent, colors),
+      expressionColors(node.alternate, colors),
+    ]);
+  }
+
+  if (t.isAssignmentExpression(node)) {
+    return expressionColors(node.right, colors);
+  }
+
+  if (t.isUnaryExpression(node) || t.isAwaitExpression(node) || t.isYieldExpression(node)) {
+    return node.argument ? expressionColors(node.argument, colors) : new Set();
+  }
+
+  if (t.isTaggedTemplateExpression(node)) {
+    return expressionColors(node.quasi, colors);
+  }
+
+  if (
+    t.isParenthesizedExpression(node) ||
+    t.isTSAsExpression(node) ||
+    t.isTSTypeAssertion(node) ||
+    t.isTSNonNullExpression(node)
+  ) {
+    return expressionColors(node.expression, colors);
+  }
+
+  if (t.isSpreadElement(node)) {
+    return expressionColors(node.argument, colors);
+  }
+
+  return new Set();
+}
+
+function addColors(colors: ColorMap, name: string, sourceColors: Set<string>): boolean {
+  if (sourceColors.size === 0) return false;
+
+  const existing = colors.get(name) ?? new Set<string>();
+  const before = existing.size;
+  for (const color of sourceColors) {
+    existing.add(color);
+  }
+  colors.set(name, existing);
+  return existing.size !== before;
+}
+
+function unionColors(colorSets: Set<string>[]): Set<string> {
+  const merged = new Set<string>();
+  for (const colorSet of colorSets) {
+    for (const color of colorSet) {
+      merged.add(color);
+    }
+  }
+  return merged;
 }
