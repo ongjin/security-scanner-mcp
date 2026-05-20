@@ -17,6 +17,27 @@ test('R-9 (path variant): one-hop readFile is flagged', () => {
   assert.ok(issues.some(i => i.type === 'Path Traversal Risk'), 'expected one-hop detection');
 });
 
+test('R-21: path multi-hop is flagged', () => {
+  const code = `
+    const f = req.body.file;
+    const norm = f;
+    fs.readFile(norm, cb);
+  `;
+  const issues = scanPath(code, 'typescript');
+  assert.ok(issues.some((i) => i.type === 'Path Traversal Risk'));
+});
+
+test('function-param taint into fs sink is flagged', () => {
+  const code = `
+    function readUserFile(file) {
+      fs.readFile(file, cb);
+    }
+    readUserFile(req.body.file);
+  `;
+  const issues = scanPath(code, 'typescript');
+  assert.ok(issues.some((i) => i.type === 'Path Traversal Risk'));
+});
+
 test('Path traversal pattern "../" is flagged', () => {
   const code = `const p = '../config';`;
   const issues = scanPath(code, 'javascript');

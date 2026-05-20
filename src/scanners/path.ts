@@ -3,7 +3,19 @@
  * 6 patterns use Pass-2 taint extension (#3).
  */
 
-import { SecurityIssue } from '../types.js';
+import * as t from '@babel/types';
+import type { SecurityIssue } from '../types.js';
+import {
+  parseCode,
+  walk,
+  analyzeTaint,
+  isTainted,
+  matchSink,
+  FS_SINKS,
+  toIssue,
+  type ParseResult,
+  type TaintState,
+} from '../utils/ast/index.js';
 import {
   lineOf,
   isCommentLine,
@@ -49,6 +61,91 @@ const TAINT_AWARE_PATTERNS: TaintAwarePattern[] = [
 
 export function scanPath(code: string, language: string): SecurityIssue[] {
   const lang = language as Language;
+  if (lang === 'javascript' || lang === 'typescript') {
+    const parsed = parseCode(code, lang);
+    if (parsed) return scanPathAST(code, parsed);
+  }
+
+  return scanPathRegex(code, lang);
+}
+
+function scanPathAST(code: string, parsed: ParseResult): SecurityIssue[] {
+  const taint = analyzeTaint(parsed);
+  const issues: SecurityIssue[] = [];
+
+  walk(parsed.file, (node) => {
+    if (!t.isCallExpression(node)) return;
+
+    for (const def of FS_SINKS) {
+      const match = matchSink(node, def);
+      if (!match.match) continue;
+
+      const arg = node.arguments[match.argIndex];
+      if (arg && isTainted(arg as t.Node, taint)) {
+        issues.push(toIssue(node, def, code));
+        return;
+      }
+    }
+
+    if (functionSummaryReachesFsSink(node, taint)) {
+      issues.push(toIssue(node, FS_SINKS[0], code));
+    }
+  });
+
+  return mergeRegexFindings(issues, scanPathRegex(code, parsed.language));
+}
+
+function functionSummaryReachesFsSink(
+  node: t.CallExpression,
+  taint: TaintState
+): boolean {
+  const calleeName = resolveCalleeName(node);
+  if (!calleeName) return false;
+
+  const summary = taint.functionSummaries.get(calleeName);
+  if (!summary) return false;
+
+  for (let i = 0; i < node.arguments.length; i++) {
+    const paramName = summary.paramOrder[i];
+    if (!paramName) continue;
+
+    const flows = summary.paramFlows.get(paramName) ?? [];
+    if (!flows.some((flow) => flow.sinkKind === 'fs')) continue;
+    if (isTainted(node.arguments[i] as t.Node, taint)) return true;
+  }
+
+  return false;
+}
+
+function resolveCalleeName(call: t.CallExpression): string | null {
+  if (t.isIdentifier(call.callee)) return call.callee.name;
+  if (t.isMemberExpression(call.callee) && t.isIdentifier(call.callee.property)) {
+    return call.callee.property.name;
+  }
+  return null;
+}
+
+function mergeRegexFindings(
+  astIssues: SecurityIssue[],
+  regexIssues: SecurityIssue[]
+): SecurityIssue[] {
+  const issues = [...astIssues];
+  const seen = new Set(issues.map(issueLineKey));
+
+  for (const issue of regexIssues) {
+    const key = issueLineKey(issue);
+    if (seen.has(key)) continue;
+    issues.push(issue);
+  }
+
+  return issues;
+}
+
+function issueLineKey(issue: SecurityIssue): string {
+  return `${issue.type}:${issue.line}`;
+}
+
+function scanPathRegex(code: string, lang: Language): SecurityIssue[] {
   const issues: SecurityIssue[] = [];
   const lines = code.split('\n');
   const tainted = collectTaintedVars(code, lang);
