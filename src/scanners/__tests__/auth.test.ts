@@ -16,6 +16,12 @@ test('CORS wildcard is flagged', () => {
   assert.ok(issues.some(i => i.type === 'CORS Allow All Origins'));
 });
 
+test('R-19: CORS via setHeader is detected (PR 2 fixes PR 1 limitation)', () => {
+  const code = `res.setHeader('Access-Control-Allow-Origin', '*');`;
+  const issues = scanAuth(code, 'typescript');
+  assert.ok(issues.some((i) => i.type === 'CORS Allow All Origins'));
+});
+
 test('JWT in /* block comment */ is skipped (#7)', () => {
   const code = `/* algorithms: ['none'] */`;
   const issues = scanAuth(code, 'javascript');

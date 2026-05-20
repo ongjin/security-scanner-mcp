@@ -7,7 +7,15 @@
  * @author zerry
  */
 
-import { SecurityIssue } from '../types.js';
+import * as t from '@babel/types';
+import type { SecurityIssue } from '../types.js';
+import {
+  parseCode,
+  walk,
+  toIssue,
+  type ParseResult,
+  type SinkDefinition,
+} from '../utils/ast/index.js';
 import {
   lineOf,
   isCommentLine,
@@ -146,10 +154,78 @@ const AUTH_PATTERNS: AuthPattern[] = [
     },
 ];
 
+const CORS_WILDCARD: SinkDefinition = {
+    name: 'CORS Allow All Origins',
+    kind: 'sql',
+    matches: () => false,
+    argIndex: -1,
+    severity: 'high',
+    message: 'CORS Access-Control-Allow-Origin이 와일드카드(*)로 설정되어 있습니다.',
+    fix: '허용할 origin을 명시적으로 화이트리스트로 지정하세요.',
+    owaspCategory: 'A05:2021 – Security Misconfiguration',
+    cweId: 'CWE-942',
+};
+
 /**
  * 인증/세션 관련 취약점을 검사합니다.
  */
 export function scanAuth(code: string, language: string): SecurityIssue[] {
+    const lang = language as Language;
+    if (lang === 'javascript' || lang === 'typescript') {
+        const parsed = parseCode(code, lang);
+        if (parsed) return scanAuthAST(code, parsed);
+    }
+
+    return scanAuthRegex(code, lang);
+}
+
+function scanAuthAST(code: string, parsed: ParseResult): SecurityIssue[] {
+    const issues: SecurityIssue[] = [];
+
+    walk(parsed.file, (node) => {
+        if (!t.isCallExpression(node)) return;
+        if (!isCorsWildcardHeaderCall(node)) return;
+
+        issues.push(toIssue(node, CORS_WILDCARD, code));
+    });
+
+    return mergeRegexFindings(issues, scanAuthRegex(code, parsed.language));
+}
+
+function isCorsWildcardHeaderCall(node: t.CallExpression): boolean {
+    if (!t.isMemberExpression(node.callee)) return false;
+    if (!t.isIdentifier(node.callee.property)) return false;
+    if (node.callee.property.name !== 'setHeader' && node.callee.property.name !== 'header') {
+        return false;
+    }
+
+    const [nameArg, valueArg] = node.arguments;
+    if (!t.isStringLiteral(nameArg)) return false;
+    if (nameArg.value.toLowerCase() !== 'access-control-allow-origin') return false;
+    return t.isStringLiteral(valueArg) && valueArg.value === '*';
+}
+
+function mergeRegexFindings(
+    astIssues: SecurityIssue[],
+    regexIssues: SecurityIssue[]
+): SecurityIssue[] {
+    const issues = [...astIssues];
+    const seen = new Set(issues.map(issueKey));
+
+    for (const issue of regexIssues) {
+        const key = issueKey(issue);
+        if (seen.has(key)) continue;
+        issues.push(issue);
+    }
+
+    return issues;
+}
+
+function issueKey(issue: SecurityIssue): string {
+    return `${issue.type}:${issue.line}:${issue.match}`;
+}
+
+function scanAuthRegex(code: string, lang: Language): SecurityIssue[] {
     const issues: SecurityIssue[] = [];
     const lines = code.split('\n');
 
@@ -161,7 +237,7 @@ export function scanAuth(code: string, language: string): SecurityIssue[] {
             const matchIndex = match.index ?? 0;
             const lineNumber = lineOf(code, matchIndex);
             const line = lines[lineNumber - 1] ?? '';
-            if (isCommentLine(line, language as Language)) continue;
+            if (isCommentLine(line, lang)) continue;
             if (isInBlockComment(code, matchIndex)) continue;
 
             issues.push({
